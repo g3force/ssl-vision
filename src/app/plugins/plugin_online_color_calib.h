@@ -45,6 +45,7 @@ private:
     virtual void CopytoLUT(LUT3D *lut);
     virtual void processRegion(FrameData* frame, CMVision::Region* region, int channel, float radius);
     LUT3D * _lut;
+    YUVLUT lut;
     VarList * _settings;
     VarBool * _v_enable;
     VarTrigger * _pub;
@@ -59,6 +60,10 @@ private:
 	std::vector<int> colorMap;
 	int outDim;
 
+	std::vector<double> maxDist;
+	std::vector<double> minDist;
+	std::vector<double> maxArea;
+	std::vector<double> radius;
 };
 
 #endif /* SRC_APP_PLUGINS_PLUGIN_ONLINE_COLOR_CALIB_H_ */

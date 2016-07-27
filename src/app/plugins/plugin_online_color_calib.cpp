@@ -22,26 +22,50 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(FrameBuffer * _buffer, LUT3D * lu
 	: VisionPlugin(_buffer), camera_parameters(camera_params), field(field)
 {
 
-  _lut=lut;
-  _settings=new VarList("Online Color Calib");
+	_lut=lut;
+	_settings=new VarList("Online Color Calib");
 
-  _settings->addChild(_pub=new VarTrigger("Update","Update"));
-  connect(_pub,SIGNAL(signalTriggered()),this,SLOT(slotUpdateTriggered()));
-  _settings->addChild(_v_enable=new VarBool("enabled", false));
+	_settings->addChild(_pub=new VarTrigger("Update","Update"));
+	connect(_pub,SIGNAL(signalTriggered()),this,SLOT(slotUpdateTriggered()));
+	_settings->addChild(_v_enable=new VarBool("enabled", false));
 
-  colorMap.push_back(CH_ORANGE); // orange
-  colorMap.push_back(CH_YELLOW); // yellow
-  colorMap.push_back(CH_BLUE); // blue
-  colorMap.push_back(CH_PINK); // pink
-  colorMap.push_back(CH_GREEN); // green
-  outDim = colorMap.size();
+	colorMap.push_back(CH_ORANGE); // orange
+	colorMap.push_back(CH_YELLOW); // yellow
+	colorMap.push_back(CH_BLUE); // blue
+	colorMap.push_back(CH_PINK); // pink
+	colorMap.push_back(CH_GREEN); // green
+	outDim = colorMap.size();
 
-  model = new LWPR_Object(3,outDim);
-  doubleVec norm(3, 255);
-  model->normIn(norm);
-  model->setInitD(100);
+	maxDist.push_back(-1);
+	maxDist.push_back(50);
+	maxDist.push_back(50);
+	maxDist.push_back(90);
+	maxDist.push_back(90);
 
-  lastUpdate = std::chrono::system_clock::now();
+	minDist.push_back(-1);
+	minDist.push_back(0);
+	minDist.push_back(0);
+	minDist.push_back(20);
+	minDist.push_back(20);
+
+	maxArea.push_back(-1);
+	maxArea.push_back(160);
+	maxArea.push_back(160);
+	maxArea.push_back(144);
+	maxArea.push_back(144);
+
+	radius.push_back(-1);
+	radius.push_back(5);
+	radius.push_back(5);
+	radius.push_back(4);
+	radius.push_back(4);
+
+	model = new LWPR_Object(3,outDim);
+	doubleVec norm(3, 255);
+	model->normIn(norm);
+	model->setInitD(100);
+
+	lastUpdate = std::chrono::system_clock::now();
 }
 
 PluginOnlineColorCalib::~PluginOnlineColorCalib() {
@@ -94,13 +118,7 @@ void PluginOnlineColorCalib::updateModel(FrameData * frame, pixelloc& loc, int c
 	for(int i=0;i<v_out.size();i++)
 		v_out[i] = (clazz==i);
 
-
-//	doubleVec out = model->predict(v_in);
 	doubleVec out = model->update(v_in, v_out);
-//	std::cout << model->nData()
-//			<< " " << v_in[0] << "/" << v_in[1] << "/" << v_in[2]
-//			<< " -> " << v_out[0] << "/" << v_out[1]
-//			<< " " << out[0] << "/" << out[1] << std::endl;
 //	double diff = 0;
 //	for(int i=0;i<out.size();i++)
 //	{
@@ -161,31 +179,11 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 	(void)options;
 	if (frame==0) return ProcessingFailed;
 
-	if(!_v_enable->getBool())
-	{
-		return ProcessingOk;
-	}
-
-	VisualizationFrame* vis_frame =
-	  reinterpret_cast<VisualizationFrame*>(frame->map.get("vis_frame"));
-	if (vis_frame == 0) {
-	vis_frame = reinterpret_cast<VisualizationFrame*>(
-			frame->map.insert("vis_frame",new VisualizationFrame()));
-	}
-
-	CMVision::ColorRegionList * colorlist;
-	colorlist=(CMVision::ColorRegionList *)frame->map.get("cmv_colorlist");
-	if (colorlist==0) {
-		printf("error in robot detection plugin: no region-lists were found!\n");
-		return ProcessingFailed;
-	}
-
 	ColorFormat source_format=frame->video.getColorFormat();
 	if (source_format!=COLOR_YUV422_UYVY) {
 //		std::cerr << "Unsupported source format: " << source_format << std::endl;
 		return ProcessingFailed;
 	}
-
 
 	Image<raw8> * img_thresholded;
 	if ((img_thresholded=(Image<raw8> *)frame->map.get("cmv_learned_threshold")) == 0) {
@@ -199,92 +197,44 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 	}
 	img_debug->allocate(frame->video.getWidth(),frame->video.getHeight());
 
-	SSL_DetectionFrame * detection_frame = (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
-	if(detection_frame == 0) {
-		printf("no detection frame\n");
-		return ProcessingFailed;
-	}
 
-	std::vector<vector3d> botPositions;
-	for(int i=0;i<detection_frame->robots_blue_size();i++)
+	if(_v_enable->getBool())
 	{
-		SSL_DetectionRobot robot = detection_frame->robots_blue(i);
-		vector3d loc;
-		loc.x = robot.x();
-		loc.y = robot.y();
-		botPositions.push_back(loc);
-	}
-	for(int i=0;i<detection_frame->robots_yellow_size();i++)
-	{
-		SSL_DetectionRobot robot = detection_frame->robots_yellow(i);
-		vector3d loc;
-		loc.x = robot.x();
-		loc.y = robot.y();
-		botPositions.push_back(loc);
-	}
-
-	std::vector<int> detections(colorMap.size(), 0);
-	std::vector<int> updates(colorMap.size(), 0);
-
-	int clazz = 0;
-	CMVision::Region* region = colorlist->getRegionList(colorMap[clazz]).getInitialElement();
-	while(region != 0)
-	{
-		vector2d pImg;
-		pImg.x = region->cen_x;
-		pImg.y = region->cen_y;
-		vector3d pField;
-		camera_parameters.image2field(pField, pImg, 21);
-		if(
-				region->height() > 3 &&
-				region->width() > 3 &&
-				region->area < 144 &&
-				pField.x > -field.field_length->getDouble()/2 &&
-				pField.x < field.field_length->getDouble()/2 &&
-				pField.y > -field.field_width->getDouble()/2 &&
-				pField.y < field.field_width->getDouble()/2)
-		{
-			double minDist = distanceToNearestBot(botPositions, pField);
-			if(minDist > 90)
-			{
-				float rad = 4;
-				img_debug->drawBox(pImg.x-rad, pImg.y-rad, rad*2, rad*2, region->color);
-				int locBefore = locs.size();
-				processRegion(frame, region, clazz, rad);
-				detections[clazz] = detections[clazz] + 1;
-				updates[clazz] = updates[clazz] + locs.size() - locBefore;
-			}
+		SSL_DetectionFrame * detection_frame = (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
+		if(detection_frame == 0) {
+			printf("no detection frame\n");
+			return ProcessingFailed;
 		}
-		region = region->next;
-	}
 
-	std::vector<double> maxDist;
-	maxDist.push_back(-1);
-	maxDist.push_back(50);
-	maxDist.push_back(50);
-	maxDist.push_back(90);
-	maxDist.push_back(90);
-	std::vector<double> minDist;
-	minDist.push_back(-1);
-	minDist.push_back(0);
-	minDist.push_back(0);
-	minDist.push_back(20);
-	minDist.push_back(20);
-	std::vector<double> maxArea;
-	maxArea.push_back(-1);
-	maxArea.push_back(160);
-	maxArea.push_back(160);
-	maxArea.push_back(144);
-	maxArea.push_back(144);
-	std::vector<double> radius;
-	radius.push_back(-1);
-	radius.push_back(5);
-	radius.push_back(5);
-	radius.push_back(4);
-	radius.push_back(4);
+		CMVision::ColorRegionList * colorlist;
+		colorlist=(CMVision::ColorRegionList *)frame->map.get("cmv_colorlist");
+		if (colorlist==0) {
+			printf("error in robot detection plugin: no region-lists were found!\n");
+			return ProcessingFailed;
+		}
 
-	for(clazz=1;clazz<colorMap.size();clazz++)
-	{
+		std::vector<vector3d> botPositions;
+		for(int i=0;i<detection_frame->robots_blue_size();i++)
+		{
+			SSL_DetectionRobot robot = detection_frame->robots_blue(i);
+			vector3d loc;
+			loc.x = robot.x();
+			loc.y = robot.y();
+			botPositions.push_back(loc);
+		}
+		for(int i=0;i<detection_frame->robots_yellow_size();i++)
+		{
+			SSL_DetectionRobot robot = detection_frame->robots_yellow(i);
+			vector3d loc;
+			loc.x = robot.x();
+			loc.y = robot.y();
+			botPositions.push_back(loc);
+		}
+
+		std::vector<int> detections(colorMap.size(), 0);
+		std::vector<int> updates(colorMap.size(), 0);
+
+		int clazz = 0;
 		CMVision::Region* region = colorlist->getRegionList(colorMap[clazz]).getInitialElement();
 		while(region != 0)
 		{
@@ -292,80 +242,113 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 			pImg.x = region->cen_x;
 			pImg.y = region->cen_y;
 			vector3d pField;
-			camera_parameters.image2field(pField, pImg, 130);
-			double dist = distanceToNearestBot(botPositions, pField);
+			camera_parameters.image2field(pField, pImg, 21);
 			if(
-				dist < maxDist[clazz] &&
-				dist > minDist[clazz] &&
-				region->area < maxArea[clazz] &&
-				region->height() > 3 &&
-				region->width() > 3)
+					region->height() > 3 &&
+					region->width() > 3 &&
+					region->area < 144 &&
+					pField.x > -field.field_length->getDouble()/2 &&
+					pField.x < field.field_length->getDouble()/2 &&
+					pField.y > -field.field_width->getDouble()/2 &&
+					pField.y < field.field_width->getDouble()/2)
 			{
-				img_debug->drawBox(pImg.x-radius[clazz], pImg.y-radius[clazz], radius[clazz]*2, radius[clazz]*2, region->color);
-				int locBefore = locs.size();
-				processRegion(frame, region, clazz, radius[clazz]);
-				detections[clazz] = detections[clazz] + 1;
-				updates[clazz] = updates[clazz] + locs.size() - locBefore;
+				double minDist = distanceToNearestBot(botPositions, pField);
+				if(minDist > 90)
+				{
+					float rad = 4;
+					img_debug->drawBox(pImg.x-rad, pImg.y-rad, rad*2, rad*2, region->color);
+					int locBefore = locs.size();
+					processRegion(frame, region, clazz, rad);
+					detections[clazz] = detections[clazz] + 1;
+					updates[clazz] = updates[clazz] + locs.size() - locBefore;
+				}
 			}
 			region = region->next;
 		}
-	}
 
-	// remove old locs
-	while(!locs.empty() && frame->time - locs[0].time > 0.1)
-	{
-		locs.pop_front();
-	}
-
-	// update
-	for(int i=0;i<locs.size();i++)
-	{
-		updateModel(frame, locs[i].loc, locs[i].clazz);
-	}
-
-	// add some random samples
-	pixelloc loc;
-	vector2d pImg;
-	vector3d pField;
-	raw8 color;
-	int rndSamples = locs.size(); // 100; // + std::min(5000, (int)locs.size()*2);
-	int rs = rndSamples;
-	for(int i=0; i<rs; i++)
-	{
-		int length = (int) (field.field_length->getInt()); // + 2*field.boundary_width->getInt());
-		int width = (int) (field.field_width->getInt()); // + 2*field.boundary_width->getInt());
-		pField.x = (rand() % length) - length/2;
-		pField.y = (rand() % width) - width/2;
-		camera_parameters.field2image(pField, pImg);
-		if(pImg.x > 0 && pImg.x < frame->video.getWidth() &&
-				pImg.y > 0 && pImg.y < frame->video.getHeight())
+		for(clazz=1;clazz<colorMap.size();clazz++)
 		{
-			loc.x = pImg.x;
-			loc.y = pImg.y;
-			if(!isInAnyRegion(colorlist, loc, 200, 10))
+			CMVision::Region* region = colorlist->getRegionList(colorMap[clazz]).getInitialElement();
+			while(region != 0)
 			{
-				img_debug->drawBox(pImg.x, pImg.y, 1, 1, 1);
-				updateModel(frame, loc, -1);
-				rndSamples--;
+				vector2d pImg;
+				pImg.x = region->cen_x;
+				pImg.y = region->cen_y;
+				vector3d pField;
+				camera_parameters.image2field(pField, pImg, 130);
+				double dist = distanceToNearestBot(botPositions, pField);
+				if(
+					dist < maxDist[clazz] &&
+					dist > minDist[clazz] &&
+					region->area < maxArea[clazz] &&
+					region->height() > 3 &&
+					region->width() > 3)
+				{
+					img_debug->drawBox(pImg.x-radius[clazz], pImg.y-radius[clazz], radius[clazz]*2, radius[clazz]*2, region->color);
+					int locBefore = locs.size();
+					processRegion(frame, region, clazz, radius[clazz]);
+					detections[clazz] = detections[clazz] + 1;
+					updates[clazz] = updates[clazz] + locs.size() - locBefore;
+				} else {
+					processRegion(frame, region, -1, radius[clazz]);
+				}
+				region = region->next;
 			}
 		}
+
+		// remove old locs
+		while(!locs.empty() && frame->time - locs[0].time > 0.1)
+		{
+			locs.pop_front();
+		}
+
+		// update
+		for(int i=0;i<locs.size();i++)
+		{
+			updateModel(frame, locs[i].loc, locs[i].clazz);
+		}
+
+		// add some random samples
+		pixelloc loc;
+		vector2d pImg;
+		vector3d pField;
+		raw8 color;
+		int rndSamples = std::min(1000, (int)locs.size());
+		int rs = rndSamples;
+		for(int i=0; i<rs; i++)
+		{
+			int length = (int) (field.field_length->getInt()); // + 2*field.boundary_width->getInt());
+			int width = (int) (field.field_width->getInt()); // + 2*field.boundary_width->getInt());
+			pField.x = (rand() % length) - length/2;
+			pField.y = (rand() % width) - width/2;
+			camera_parameters.field2image(pField, pImg);
+			if(pImg.x > 0 && pImg.x < frame->video.getWidth() &&
+					pImg.y > 0 && pImg.y < frame->video.getHeight())
+			{
+				loc.x = pImg.x;
+				loc.y = pImg.y;
+				if(!isInAnyRegion(colorlist, loc, 200, 10))
+				{
+					img_debug->drawBox(pImg.x, pImg.y, 1, 1, 1);
+					updateModel(frame, loc, -1);
+					rndSamples--;
+				}
+			}
+		}
+
+		std::cout << "det: ";
+		for(int i=0;i<detections.size();i++)
+			std::cout << detections[i] << " ";
+
+		std::cout << "upd: ";
+		for(int i=0;i<updates.size();i++)
+			std::cout << updates[i] << " ";
+
+		std::cout << "rnd: " << (rs-rndSamples) << "/" << rs;
+		std::cout << std::endl;
+		CopytoLUT(&lut);
 	}
 
-	std::cout << "det: ";
-	for(int i=0;i<detections.size();i++)
-		std::cout << detections[i] << " ";
-
-	std::cout << "upd: ";
-	for(int i=0;i<updates.size();i++)
-		std::cout << updates[i] << " ";
-
-	std::cout << "rnd: " << (rs-rndSamples) << "/" << rs;
-	std::cout << std::endl;
-
-	YUVLUT lut;
-	CopytoLUT(&lut);
-
-	//directly apply YUV lut:
 	CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded,&(frame->video),&lut);
 
 	return ProcessingOk;
