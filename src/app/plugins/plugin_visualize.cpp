@@ -35,6 +35,8 @@ PluginVisualize::PluginVisualize(
   _v_image = new VarBool("image", true);
   _v_greyscale = new VarBool("greyscale", false);
   _v_thresholded = new VarBool("thresholded", false);
+  _v_l_thresholded = new VarBool("learned_thresholded", false);
+  _v_online_color_calib = new VarBool("online color calib", false);
   _v_blobs = new VarBool("blobs", false);
   _v_camera_calibration = new VarBool("camera calibration", false);
   _v_calibration_result = new VarBool("calibration result", false);
@@ -47,6 +49,8 @@ PluginVisualize::PluginVisualize(
   _settings->addChild(_v_image);
   _settings->addChild(_v_greyscale);
   _settings->addChild(_v_thresholded);
+  _settings->addChild(_v_l_thresholded);
+  _settings->addChild(_v_online_color_calib);
   _settings->addChild(_v_blobs);
   _settings->addChild(_v_camera_calibration);
   _settings->addChild(_v_calibration_result);
@@ -127,6 +131,48 @@ void PluginVisualize::DrawThresholdedImage(
         }
       }
     }
+  }
+}
+
+void PluginVisualize::DrawLearnedThresholdedImage(
+	FrameData* data, VisualizationFrame* vis_frame) {
+  if (_threshold_lut != 0) {
+	Image<raw8>* img_thresholded =
+		reinterpret_cast<Image<raw8>*>(data->map.get("cmv_learned_threshold"));
+	if (img_thresholded != 0) {
+	  int n = vis_frame->data.getNumPixels();
+	  if (img_thresholded->getNumPixels() == n) {
+		rgb * vis_ptr = vis_frame->data.getPixelData();
+		raw8 * seg_ptr = img_thresholded->getPixelData();
+		for (int i = 0; i < n; i++) {
+		  if (seg_ptr[i].getIntensity() != 0) {
+			vis_ptr[i] = _threshold_lut->getChannel(
+				seg_ptr[i].getIntensity()).draw_color;
+		  }
+		}
+	  }
+	}
+  }
+}
+
+void PluginVisualize::DrawOnlineColorCalibImage(
+	FrameData* data, VisualizationFrame* vis_frame) {
+  if (_threshold_lut != 0) {
+	Image<raw8>* img_thresholded =
+		reinterpret_cast<Image<raw8>*>(data->map.get("cmv_online_color_calib"));
+	if (img_thresholded != 0) {
+	  int n = vis_frame->data.getNumPixels();
+	  if (img_thresholded->getNumPixels() == n) {
+		rgb * vis_ptr = vis_frame->data.getPixelData();
+		raw8 * seg_ptr = img_thresholded->getPixelData();
+		for (int i = 0; i < n; i++) {
+		  if (seg_ptr[i].getIntensity() != 0) {
+			vis_ptr[i] = _threshold_lut->getChannel(
+				seg_ptr[i].getIntensity()).draw_color;
+		  }
+		}
+	  }
+	}
   }
 }
 
@@ -396,6 +442,14 @@ ProcessResult PluginVisualize::process(
     // Draw color-thresholded image.
     if (_v_thresholded->getBool()) {
       DrawThresholdedImage(data, vis_frame);
+    }
+
+    if (_v_l_thresholded->getBool()) {
+        DrawLearnedThresholdedImage(data, vis_frame);
+    }
+
+    if (_v_online_color_calib->getBool()) {
+        DrawOnlineColorCalibImage(data, vis_frame);
     }
 
     //draw blob finding results:

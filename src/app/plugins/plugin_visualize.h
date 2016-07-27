@@ -57,6 +57,8 @@ protected:
   VarBool * _v_image;
   VarBool * _v_greyscale;
   VarBool * _v_thresholded;
+  VarBool * _v_l_thresholded;
+  VarBool * _v_online_color_calib;
   VarBool * _v_blobs;
   VarBool * _v_camera_calibration;
   VarBool * _v_calibration_result;
@@ -84,6 +86,10 @@ protected:
   void DrawCameraImage(FrameData* data, VisualizationFrame* vis_frame);
 
   void DrawThresholdedImage(FrameData* data, VisualizationFrame* vis_frame);
+
+  void DrawLearnedThresholdedImage(FrameData* data, VisualizationFrame* vis_frame);
+
+  void DrawOnlineColorCalibImage(FrameData* data, VisualizationFrame* vis_frame);
 
   void DrawBlobs(FrameData* data, VisualizationFrame* vis_frame);
 

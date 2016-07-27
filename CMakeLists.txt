@@ -214,6 +214,9 @@ include_directories(${PROJECT_SOURCE_DIR}/src/app/gui)
 include_directories(${PROJECT_SOURCE_DIR}/src/app/plugins)
 include_directories(${PROJECT_SOURCE_DIR}/src/app/stacks)
 
+include_directories(${PROJECT_SOURCE_DIR}/lib/include)
+link_directories(${PROJECT_SOURCE_DIR}/lib)
+
 set (SRCS ${SRCS}
 	src/app/capture_thread.cpp
 	src/app/framedata.cpp
@@ -243,6 +246,7 @@ set (SRCS ${SRCS}
 	src/app/plugins/plugin_legacysslnetworkoutput.cpp
 	src/app/plugins/plugin_visualize.cpp
 	src/app/plugins/plugin_dvr.cpp
+	src/app/plugins/plugin_online_color_calib.cpp
 	src/app/plugins/visionplugin.cpp
 
 	src/app/stacks/multistack_robocup_ssl.cpp
@@ -271,6 +275,7 @@ qt4_wrap_cpp (MOC_SRCS
 	src/app/plugins/visionplugin.h
 	src/app/plugins/plugin_colorcalib.h
 	src/app/plugins/plugin_colorthreshold.h
+	src/app/plugins/plugin_online_color_calib.h
 
 	src/app/stacks/multistack_robocup_ssl.h
 
@@ -339,6 +344,8 @@ message( STATUS "CC Flags: ${CMAKE_CXX_FLAGS_RELEASE}")
 message (STATUS "Custom CC Flags: ${cc_flags}")
 
 add_definitions(${cc_flags})
+
+set (libs ${QT_LIBRARIES} ${EIGEN3_LIBRARIES} dc1394 jpeg png protobuf pthread GL GLU lwpr)
 
 ## build the common code
 add_library(sslvision ${SHARED_MOC_SRCS} ${SHARED_RC_SRCS} ${CC_PROTO} ${SHARED_SRCS})

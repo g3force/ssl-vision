@@ -91,6 +91,11 @@ void GLLUTWidget::editClearAll() {
   actionRedo->setEnabled(false);
 }
 
+void GLLUTWidget::refresh()
+{
+	needs_init = true;
+	redraw();
+}
 
 bool GLLUTWidget::glPixel2OrthoCoordinates(QMouseEvent * event, float & x, float & y)
 {
@@ -498,6 +503,14 @@ GLLUTWidget::GLLUTWidget(LUTChannelMode mode, QWidget *parent) : QGLWidget(paren
   actionClearSampler->setToolTip("Clear Sampler");
   addAction(actionClearSampler);
 
+  QAction * actionRefresh = new QAction(this);
+  actionRefresh->setObjectName("actionRefresh");
+  actionRefresh->setIcon(QIcon(":/icons/xload.png"));
+  actionRefresh->setShortcut(QKeySequence("r"));
+  actionRefresh->setShortcutContext(Qt::WidgetShortcut);
+  actionRefresh->setToolTip("Refresh lut");
+  addAction(actionRefresh);
+
   connect(actionViewToggleBackground, SIGNAL(triggered()), this, SLOT(redraw()));
   connect(actionViewToggleOtherChannels, SIGNAL(triggered()), this, SLOT(rebuildAndRedraw()));
   connect(actionSwitchMode, SIGNAL(triggered()), this, SLOT(switchMode()));
@@ -505,6 +518,7 @@ GLLUTWidget::GLLUTWidget(LUTChannelMode mode, QWidget *parent) : QGLWidget(paren
   connect(actionRedo, SIGNAL(triggered()), this, SLOT(editRedo()));
   connect(actionUndo, SIGNAL(triggered()), this, SLOT(editUndo()));
   connect(actionClearSampler, SIGNAL(triggered()), this, SLOT(clearSampler()));
+  connect(actionRefresh, SIGNAL(triggered()), this, SLOT(refresh()));
   //connect(actionSave, SIGNAL(triggered()), this, SLOT(saveImage()));
   connect(actionHelp, SIGNAL(triggered()), this, SLOT(callHelp()));
   
