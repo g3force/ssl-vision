@@ -27,6 +27,7 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(FrameBuffer * _buffer, LUT3D * lu
 
   _settings->addChild(_pub=new VarTrigger("Update","Update"));
   connect(_pub,SIGNAL(signalTriggered()),this,SLOT(slotUpdateTriggered()));
+  _settings->addChild(_v_enable=new VarBool("enabled", false));
 
   colorMap.push_back(CH_ORANGE); // orange
   colorMap.push_back(CH_YELLOW); // yellow
@@ -160,6 +161,11 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 	(void)options;
 	if (frame==0) return ProcessingFailed;
 
+	if(!_v_enable->getBool())
+	{
+		return ProcessingOk;
+	}
+
 	VisualizationFrame* vis_frame =
 	  reinterpret_cast<VisualizationFrame*>(frame->map.get("vis_frame"));
 	if (vis_frame == 0) {
@@ -176,7 +182,7 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 
 	ColorFormat source_format=frame->video.getColorFormat();
 	if (source_format!=COLOR_YUV422_UYVY) {
-		std::cerr << "Unsupported source format: " << source_format << std::endl;
+//		std::cerr << "Unsupported source format: " << source_format << std::endl;
 		return ProcessingFailed;
 	}
 

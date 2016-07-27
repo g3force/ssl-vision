@@ -46,6 +46,7 @@ private:
     virtual void processRegion(FrameData* frame, CMVision::Region* region, int channel, float radius);
     LUT3D * _lut;
     VarList * _settings;
+    VarBool * _v_enable;
     VarTrigger * _pub;
 
     const CameraParameters& camera_parameters;
