@@ -9,7 +9,6 @@
 #include <iostream>
 #include "cmvision_region.h"
 #include <algorithm>
-#include "messages_robocup_ssl_detection.pb.h"
 #include "geometry.h"
 
 #define CH_ORANGE 2
@@ -19,63 +18,73 @@
 #define CH_GREEN 7
 
 PluginOnlineColorCalib::PluginOnlineColorCalib(FrameBuffer * _buffer, LUT3D * lut, const CameraParameters& camera_params, const RoboCupField& field)
-	: VisionPlugin(_buffer), camera_parameters(camera_params), field(field)
+	: VisionPlugin(_buffer), camera_parameters(camera_params), field(field), cProp(5)
 {
 
 	_lut=lut;
 	_settings=new VarList("Online Color Calib");
 
-	_settings->addChild(_pub=new VarTrigger("Update","Update"));
-	connect(_pub,SIGNAL(signalTriggered()),this,SLOT(slotUpdateTriggered()));
+	_settings->addChild(_updGlob=new VarTrigger("UpdateGlob","Update Global LUT"));
+	_settings->addChild(_updVis=new VarTrigger("UpdateVis","Update Visualization"));
+	connect(_updGlob,SIGNAL(signalTriggered()),this,SLOT(slotUpdateTriggered()));
+	connect(_updVis,SIGNAL(signalTriggered()),this,SLOT(slotUpdateVisTriggered()));
 	_settings->addChild(_v_enable=new VarBool("enabled", false));
+	_settings->addChild(_v_lifeUpdate=new VarBool("life update", false));
+	_settings->addChild(_v_removeOutlierBlobs=new VarBool("remove outlier blobs", false));
 
-	colorMap.push_back(CH_ORANGE); // orange
-	colorMap.push_back(CH_YELLOW); // yellow
-	colorMap.push_back(CH_BLUE); // blue
-	colorMap.push_back(CH_PINK); // pink
-	colorMap.push_back(CH_GREEN); // green
-	outDim = colorMap.size();
+	cProp[0].color = CH_ORANGE;
+	cProp[0].height = 21;
+	cProp[0].minDist = 150;
+	cProp[0].maxDist = 20000;
+	cProp[0].radius = 21;
+	cProp[0].nAngleRanges = 0;
 
-	maxDist.push_back(-1);
-	maxDist.push_back(50);
-	maxDist.push_back(50);
-	maxDist.push_back(90);
-	maxDist.push_back(90);
+	cProp[1].color = CH_YELLOW;
+	cProp[2].color = CH_BLUE;
+	for(int i=1;i<3;i++)
+	{
+		cProp[i].height = 130;
+		cProp[i].minDist = 0;
+		cProp[i].maxDist = 20;
+		cProp[i].radius = 25;
+		cProp[i].nAngleRanges = 0;
+	}
 
-	minDist.push_back(-1);
-	minDist.push_back(0);
-	minDist.push_back(0);
-	minDist.push_back(20);
-	minDist.push_back(20);
+	cProp[3].color = CH_PINK;
+	cProp[4].color = CH_GREEN;
+	for(int i=3;i<5;i++)
+	{
+		cProp[i].height = 130;
+		cProp[i].minDist = 40;
+		cProp[i].maxDist = 90;
+		cProp[i].radius = 20;
+		cProp[i].nAngleRanges = 2;
+		cProp[i].angleRanges[0].min = 40.0/180.0 * M_PI;
+		cProp[i].angleRanges[0].max = 75.0/180.0 * M_PI;
+		cProp[i].angleRanges[1].min = 125.0/180.0 * M_PI;
+		cProp[i].angleRanges[1].max = 165.0/180.0 * M_PI;
+	}
 
-	maxArea.push_back(-1);
-	maxArea.push_back(160);
-	maxArea.push_back(160);
-	maxArea.push_back(144);
-	maxArea.push_back(144);
-
-	radius.push_back(-1);
-	radius.push_back(5);
-	radius.push_back(5);
-	radius.push_back(4);
-	radius.push_back(4);
-
-	model = new LWPR_Object(3,outDim);
+	model = new LWPR_Object(3,cProp.size());
 	doubleVec norm(3, 255);
 	model->normIn(norm);
-	model->setInitD(100);
-
-	lastUpdate = std::chrono::system_clock::now();
+	model->setInitD(500);
+	model->wGen(0.1);
 }
 
 PluginOnlineColorCalib::~PluginOnlineColorCalib() {
-	// TODO Auto-generated destructor stub
 }
 
 
 void PluginOnlineColorCalib::slotUpdateTriggered() {
   lock();
   CopytoLUT(_lut);
+  unlock();
+}
+
+void PluginOnlineColorCalib::slotUpdateVisTriggered() {
+  lock();
+  CopytoLUT(&lut);
   unlock();
 }
 
@@ -111,7 +120,7 @@ void PluginOnlineColorCalib::updateModel(FrameData * frame, pixelloc& loc, int c
 	}
 
 	doubleVec v_in(3);
-	doubleVec v_out(outDim);
+	doubleVec v_out(cProp.size());
 	v_in[0] = color.y;
 	v_in[1] = color.u;
 	v_in[2] = color.v;
@@ -119,37 +128,131 @@ void PluginOnlineColorCalib::updateModel(FrameData * frame, pixelloc& loc, int c
 		v_out[i] = (clazz==i);
 
 	doubleVec out = model->update(v_in, v_out);
-//	double diff = 0;
-//	for(int i=0;i<out.size();i++)
-//	{
-//		diff += fabsf(v_out[i] - out[i]);
-//	}
-//	if(clazz == 0 && diff > 0.1)
-//		std::cout << model->nData() << " " << diff << " " << v_out[0] << "/" << v_out[1] << " " << out[0] << "/" << out[1] <<
-//			" " << v_in[0] << "/" << v_in[1] << "/" << v_in[2] << std::endl;
+	int col = getColorFromModelOutput(out);
+	lut.set(color.y,color.u,color.v,col);
+	if(_v_lifeUpdate->getBool())
+	{
+		_lut->set(color.y,color.u,color.v,col);
+	}
 }
 
-void PluginOnlineColorCalib::processRegion(FrameData* frame, CMVision::Region* region, int clazz, float radius)
+static double distanceSq(const pixelloc& p1, const pixelloc& p2)
 {
-	pixelloc loc;
-	float cx = region->cen_x;
-	float cy = region->cen_y;
-	float xRadius = radius;
-	float yRadius = radius;
-	float xStep = 1;
-	float yStep = 1;
+	double dx = p1.x-p2.x;
+	double dy = p1.y-p2.y;
+	return dx*dx+dy*dy;
+}
+
+static LocStamped* findNearestLoc(const std::vector<LocStamped*>& locs, const LocStamped& loc, double* dist, LocStamped* exceptThis = 0)
+{
+	double minDistSq = 1e20;
+	LocStamped* nearest = 0;
+	for(int i=0;i<locs.size();i++)
+	{
+		if(locs[i]->clazz != loc.clazz) continue;
+		double distSq = distanceSq(locs[i]->loc, loc.loc);
+		if(distSq < minDistSq && exceptThis != locs[i])
+		{
+			minDistSq = distSq;
+			nearest = locs[i];
+		}
+	}
+	*dist = sqrt(minDistSq);
+	return nearest;
+}
+
+static void addLoc(std::vector<LocStamped*>& locs, LocStamped& loc)
+{
+	double dist = 0;
+	LocStamped* nearest = findNearestLoc(locs, loc, &dist);
+	if(nearest != 0 && dist < 1)
+	{
+		*nearest = loc;
+	} else {
+		LocStamped* newLoc = new LocStamped;
+		*newLoc = loc;
+		locs.push_back(newLoc);
+	}
+}
+
+static void addRegion(
+		const SSL_DetectionFrame * detection_frame,
+		std::vector<LocStamped*>& locs,
+		int clazz,
+		float x, float y,
+		double prop = 1)
+{
 	LocStamped locStamped;
 	locStamped.clazz = clazz;
+	locStamped.time = detection_frame->t_capture();
+	locStamped.loc.x = x;
+	locStamped.loc.y = y;
+	locStamped.prop = prop;
+	addLoc(locs, locStamped);
+}
 
-	for(float x = cx-xRadius; x<=cx+xRadius; x+=xStep)
+void PluginOnlineColorCalib::addRegionCross(
+		const SSL_DetectionFrame * detection_frame,
+		std::vector<LocStamped*>& locs,
+		int clazz,
+		int targetClazz,
+		CMVision::Region* region,
+		int width,
+		int height,
+		int exclWidth,
+		int exclHeight,
+		int offset)
+{
+	for(double i=-width/2-offset;i<=width/2+offset;i++)
 	{
-		for(float y = cy-yRadius; y<=cy+yRadius; y+=yStep)
-		{
-			locStamped.time = frame->time;
-			locStamped.loc.x = x;
-			locStamped.loc.y = y;
-			locs.push_back(locStamped);
-		}
+		if(abs(i) < exclWidth) continue;
+		int x = region->cen_x + i;
+		int y = region->cen_y;
+		double prop = 1; //exp(-(i*i) / (2.0*width*width));
+		addRegion(detection_frame, locs, targetClazz, x, y, prop);
+	}
+	for(int i=-height/2-offset;i<=height/2+offset;i++)
+	{
+		if(abs(i) < exclHeight) continue;
+		int x = region->cen_x;
+		int y = region->cen_y + i;
+		double prop = 1; // = exp(-(i*i) / (2.0*height*height));
+		addRegion(detection_frame, locs, targetClazz, x, y, prop);
+	}
+}
+
+void PluginOnlineColorCalib::addRegionEllipse(
+		const SSL_DetectionFrame * detection_frame,
+		std::vector<LocStamped*>& locs,
+		int clazz,
+		int targetClazz,
+		CMVision::Region* region,
+		int width,
+		int height,
+		int exclWidth,
+		int exclHeight,
+		int offset)
+{
+	int maxY = height/2+offset;
+	int maxX = width/2+offset;
+	for(int y=-maxY; y<=maxY; y+=2) {
+		if(abs(y) < exclHeight) continue;
+	    for(int x=-maxX; x<=maxX; x+=2) {
+			if(abs(x) < exclWidth) continue;
+	        if(x*x*maxY*maxY+y*y*maxX*maxX <= maxY*maxY*maxX*maxX)
+	        {
+	    		int rx = region->cen_x + x;
+	    		int ry = region->cen_y + y;
+
+//	    		double prop = exp(-((x*x) / (width*width) + (y*y) / (height*height))/2.0);
+	    		double prop = 1;
+//	    		if(abs(y) > height/2 || abs(x) > width/2)
+				if(x*x*width*width/4+y*y*height*height/4 <= width*width*height*height/16)
+	    			addRegion(detection_frame, locs, targetClazz, rx, ry, prop);
+	    		else
+	    			addRegion(detection_frame, locs, -1, rx, ry, prop);
+	        }
+	    }
 	}
 }
 
@@ -160,18 +263,193 @@ static double distanceSq(const vector3d& p1, const vector3d& p2)
 	return dx*dx+dy*dy;
 }
 
-double distanceToNearestBot(const std::vector<vector3d>& botPositions, const vector3d& loc)
+static BotPosStamped* findNearestBotPos(const std::vector<BotPosStamped*> botPoss, const vector3d& loc, double* dist, BotPosStamped* exceptThisBot = 0)
 {
 	double minDistSq = 1e20;
-	for(int i=0;i<botPositions.size();i++)
+	BotPosStamped* nearestBot = 0;
+	for(int i=0;i<botPoss.size();i++)
 	{
-		double distSq = distanceSq(botPositions[i], loc);
-		if(distSq < minDistSq)
+		double distSq = distanceSq(botPoss[i]->pos, loc);
+		if(distSq < minDistSq && exceptThisBot != botPoss[i])
 		{
 			minDistSq = distSq;
+			nearestBot = botPoss[i];
 		}
 	}
-	return sqrt(minDistSq);
+	*dist = sqrt(minDistSq);
+	return nearestBot;
+}
+
+static void updateBotPositions(const SSL_DetectionFrame * detection_frame, std::vector<BotPosStamped*>& botPoss)
+{
+	std::vector<SSL_DetectionRobot> robots;
+	robots.insert(robots.end(),
+			detection_frame->robots_blue().begin(),
+			detection_frame->robots_blue().end());
+	robots.insert(robots.end(),
+			detection_frame->robots_yellow().begin(),
+			detection_frame->robots_yellow().end());
+
+	for(std::vector<SSL_DetectionRobot>::iterator robot = robots.begin(); robot != robots.end(); robot++)
+	{
+		vector3d loc;
+		loc.x = robot->x();
+		loc.y = robot->y();
+		double dist = 0;
+		BotPosStamped* nearestBot = findNearestBotPos(botPoss, loc, &dist);
+		if(nearestBot != 0 && dist < 50)
+		{
+			nearestBot->time = detection_frame->t_capture();
+			nearestBot->pos = loc;
+			nearestBot->orientation = robot->orientation();
+		} else {
+			BotPosStamped* botPos = new BotPosStamped;
+			botPos->time = detection_frame->t_capture();
+			botPos->pos = loc;
+			botPos->orientation = robot->orientation();
+			botPoss.push_back(botPos);
+		}
+	}
+
+	// remove old ones
+	for(std::vector<BotPosStamped*>::iterator it = botPoss.begin(); it != botPoss.end();)
+	{
+		BotPosStamped* botPos = *it;
+		if((detection_frame->t_capture() - botPos->time) > 2)
+		{
+			delete botPos;
+			botPos = 0;
+			it = botPoss.erase(it);
+		} else {
+			it++;
+		}
+	}
+}
+
+static void updateLocs(const SSL_DetectionFrame * detection_frame, std::vector<LocStamped*>& locs)
+{
+	// remove old ones
+	for(std::vector<LocStamped*>::iterator it = locs.begin(); it != locs.end();)
+	{
+		LocStamped* loc = *it;
+		if((detection_frame->t_capture() - loc->time) > 0.2)
+		{
+			delete loc;
+			loc = 0;
+			it = locs.erase(it);
+		} else {
+			it++;
+		}
+	}
+}
+
+void PluginOnlineColorCalib::regionDesiredPixelDim(CMVision::Region* region, int clazz, int& width, int& height)
+{
+	vector2d pImg;
+	pImg.x = region->cen_x;
+	pImg.y = region->cen_y;
+	vector3d pField;
+	camera_parameters.image2field(pField, pImg, cProp[clazz].height);
+
+	vector3d pField_left = pField;
+	vector3d pField_right = pField;
+	vector3d pField_top = pField;
+	vector3d pField_bottom = pField;
+	pField_left.x -= cProp[clazz].radius;
+	pField_right.x += cProp[clazz].radius;
+	pField_top.y += cProp[clazz].radius;
+	pField_bottom.y -= cProp[clazz].radius;
+
+	vector2d pImg_left;
+	vector2d pImg_right;
+	vector2d pImg_top;
+	vector2d pImg_bottom;
+	camera_parameters.field2image(pField_left, pImg_left);
+	camera_parameters.field2image(pField_right, pImg_right);
+	camera_parameters.field2image(pField_top, pImg_top);
+	camera_parameters.field2image(pField_bottom, pImg_bottom);
+
+	width = pImg_left.x - pImg_right.x;
+	height = pImg_top.y - pImg_bottom.y;
+}
+
+void PluginOnlineColorCalib::regionFieldDim(CMVision::Region* region, int clazz, double& width, double& height)
+{
+	vector2d pImg;
+	pImg.x = region->cen_x;
+	pImg.y = region->cen_y;
+
+	vector2d pImg_left = pImg;
+	vector2d pImg_right = pImg;
+	vector2d pImg_bottom = pImg;
+	vector2d pImg_top = pImg;
+	pImg_left.x += region->width() / 2;
+	pImg_right.x -= region->width() / 2;
+	pImg_bottom.y -= region->height() / 2;
+	pImg_top.y += region->height() / 2;
+
+	vector3d pField_left;
+	vector3d pField_right;
+	vector3d pField_bottom;
+	vector3d pField_top;
+	camera_parameters.image2field(pField_left, pImg_left, cProp[clazz].height);
+	camera_parameters.image2field(pField_right, pImg_right, cProp[clazz].height);
+	camera_parameters.image2field(pField_bottom, pImg_bottom, cProp[clazz].height);
+	camera_parameters.image2field(pField_top, pImg_top, cProp[clazz].height);
+
+	width = pField_right.x - pField_left.x;
+	height = pField_top.y - pField_bottom.y;
+}
+
+double normalizeAngle(double angle) {
+	// Don't call this a hack! It's numeric!
+	return (angle - (round((angle / (M_PI*2)) - 1e-6) * M_PI*2));
+}
+
+double angleDiff(double angle1, double angle2) {
+	return normalizeAngle(normalizeAngle(angle1) - normalizeAngle(angle2));
+}
+
+double norm(vector2d vec)
+{
+	return sqrt(vec.x*vec.x+vec.y*vec.y);
+}
+
+double getAngle(vector2d vec)
+{
+	if(vec.x == 0 && vec.y == 0)
+		return 0;
+	double tmp = acos( vec.x / norm(vec) );
+	if(vec.y > 0)
+	{
+		return tmp;
+	}
+	return -tmp;
+}
+
+bool PluginOnlineColorCalib::isInAngleRange(vector3d& pField, int clazz, BotPosStamped* botPos)
+{
+	bool inAngleRange = true;
+	if(cProp[clazz].nAngleRanges > 0)
+	{
+		inAngleRange = false;
+		vector2d regionDir;
+		regionDir.x = pField.x - botPos->pos.x;
+		regionDir.y = pField.y - botPos->pos.y;
+		double regionAngle = getAngle(regionDir);
+		double diff = std::abs(angleDiff(botPos->orientation, regionAngle));
+
+		for(int i=0;i<cProp[clazz].nAngleRanges;i++)
+		{
+			if(diff > cProp[clazz].angleRanges[i].min
+				&& diff < cProp[clazz].angleRanges[i].max)
+			{
+				inAngleRange = true;
+				break;
+			}
+		}
+	}
+	return inAngleRange;
 }
 
 ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions * options)
@@ -196,7 +474,7 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 		img_debug=(Image<raw8> *)frame->map.insert("cmv_online_color_calib",new Image<raw8>());
 	}
 	img_debug->allocate(frame->video.getWidth(),frame->video.getHeight());
-
+	img_debug->fillColor(0);
 
 	if(_v_enable->getBool())
 	{
@@ -213,140 +491,119 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 			return ProcessingFailed;
 		}
 
-		std::vector<vector3d> botPositions;
-		for(int i=0;i<detection_frame->robots_blue_size();i++)
-		{
-			SSL_DetectionRobot robot = detection_frame->robots_blue(i);
-			vector3d loc;
-			loc.x = robot.x();
-			loc.y = robot.y();
-			botPositions.push_back(loc);
-		}
-		for(int i=0;i<detection_frame->robots_yellow_size();i++)
-		{
-			SSL_DetectionRobot robot = detection_frame->robots_yellow(i);
-			vector3d loc;
-			loc.x = robot.x();
-			loc.y = robot.y();
-			botPositions.push_back(loc);
-		}
+		updateBotPositions(detection_frame, botPoss);
 
-		std::vector<int> detections(colorMap.size(), 0);
-		std::vector<int> updates(colorMap.size(), 0);
-
-		int clazz = 0;
-		CMVision::Region* region = colorlist->getRegionList(colorMap[clazz]).getInitialElement();
-		while(region != 0)
+		for(int clazz=0;clazz<cProp.size();clazz++)
 		{
-			vector2d pImg;
-			pImg.x = region->cen_x;
-			pImg.y = region->cen_y;
-			vector3d pField;
-			camera_parameters.image2field(pField, pImg, 21);
-			if(
-					region->height() > 3 &&
-					region->width() > 3 &&
-					region->area < 144 &&
-					pField.x > -field.field_length->getDouble()/2 &&
-					pField.x < field.field_length->getDouble()/2 &&
-					pField.y > -field.field_width->getDouble()/2 &&
-					pField.y < field.field_width->getDouble()/2)
-			{
-				double minDist = distanceToNearestBot(botPositions, pField);
-				if(minDist > 90)
-				{
-					float rad = 4;
-					img_debug->drawBox(pImg.x-rad, pImg.y-rad, rad*2, rad*2, region->color);
-					int locBefore = locs.size();
-					processRegion(frame, region, clazz, rad);
-					detections[clazz] = detections[clazz] + 1;
-					updates[clazz] = updates[clazz] + locs.size() - locBefore;
-				}
-			}
-			region = region->next;
-		}
-
-		for(clazz=1;clazz<colorMap.size();clazz++)
-		{
-			CMVision::Region* region = colorlist->getRegionList(colorMap[clazz]).getInitialElement();
+			CMVision::Region* region = colorlist->getRegionList(cProp[clazz].color).getInitialElement();
 			while(region != 0)
 			{
 				vector2d pImg;
 				pImg.x = region->cen_x;
 				pImg.y = region->cen_y;
 				vector3d pField;
-				camera_parameters.image2field(pField, pImg, 130);
-				double dist = distanceToNearestBot(botPositions, pField);
+				camera_parameters.image2field(pField, pImg, cProp[clazz].height);
+
 				if(
-					dist < maxDist[clazz] &&
-					dist > minDist[clazz] &&
-					region->area < maxArea[clazz] &&
-					region->height() > 3 &&
-					region->width() > 3)
+					pField.x > -(field.field_length->getDouble())/2 - field.boundary_width->getDouble()
+					&& pField.x < field.field_length->getDouble()/2 + field.boundary_width->getDouble()
+					&& pField.y > -field.field_width->getDouble()/2 - field.boundary_width->getDouble()
+					&& pField.y < field.field_width->getDouble()/2 + field.boundary_width->getDouble()
+				)
 				{
-					img_debug->drawBox(pImg.x-radius[clazz], pImg.y-radius[clazz], radius[clazz]*2, radius[clazz]*2, region->color);
-					int locBefore = locs.size();
-					processRegion(frame, region, clazz, radius[clazz]);
-					detections[clazz] = detections[clazz] + 1;
-					updates[clazz] = updates[clazz] + locs.size() - locBefore;
-				} else {
-					processRegion(frame, region, -1, radius[clazz]);
+					double dist;
+					BotPosStamped* botPos = findNearestBotPos(botPoss, pField, &dist);
+					if(dist < cProp[clazz].maxDist)
+					{
+						double fWidth, fHeight;
+						regionFieldDim(region, clazz, fWidth, fHeight);
+
+						if(dist < cProp[clazz].minDist
+							|| !isInAngleRange(pField, clazz, botPos))
+						{
+							// region too narrow / not in angle range -> unwanted
+							addRegionCross(detection_frame, locs, clazz, -1, region,
+									region->width(), region->height(),
+									-1, -1,
+									0);
+						} else
+						{
+							int pWidth, pHeight;
+							regionDesiredPixelDim(region, clazz, pWidth, pHeight);
+
+							if(fWidth > cProp[clazz].radius*2 + 10
+							|| fHeight > cProp[clazz].radius*2 + 10)
+							{
+								// region too large -> force decreasing size
+								addRegionEllipse(detection_frame, locs, clazz, -1, region,
+										region->width(), region->height(),
+										pWidth, pHeight,
+										0);
+							}
+							addRegionEllipse(detection_frame, locs, clazz, clazz, region,
+									pWidth, pHeight,
+									-1, -1,
+									2);
+						}
+					} else if(_v_removeOutlierBlobs->getBool()){
+						addRegionCross(detection_frame, locs, clazz, -1, region,
+										region->width(), region->height(),
+										-1, -1,
+										0);
+					}
 				}
 				region = region->next;
 			}
 		}
 
-		// remove old locs
-		while(!locs.empty() && frame->time - locs[0].time > 0.1)
-		{
-			locs.pop_front();
-		}
+		updateLocs(detection_frame, locs);
 
-		// update
 		for(int i=0;i<locs.size();i++)
 		{
-			updateModel(frame, locs[i].loc, locs[i].clazz);
+			updateModel(frame, locs[i]->loc, locs[i]->clazz);
+			raw8 color;
+			if(locs[i]->clazz >= 0)
+				color = cProp[locs[i]->clazz].color;
+			else
+				color = 1;
+			img_debug->setPixel(locs[i]->loc.x, locs[i]->loc.y, color);
 		}
 
 		// add some random samples
-		pixelloc loc;
-		vector2d pImg;
-		vector3d pField;
-		raw8 color;
-		int rndSamples = std::min(1000, (int)locs.size());
-		int rs = rndSamples;
-		for(int i=0; i<rs; i++)
-		{
-			int length = (int) (field.field_length->getInt()); // + 2*field.boundary_width->getInt());
-			int width = (int) (field.field_width->getInt()); // + 2*field.boundary_width->getInt());
-			pField.x = (rand() % length) - length/2;
-			pField.y = (rand() % width) - width/2;
-			camera_parameters.field2image(pField, pImg);
-			if(pImg.x > 0 && pImg.x < frame->video.getWidth() &&
-					pImg.y > 0 && pImg.y < frame->video.getHeight())
-			{
-				loc.x = pImg.x;
-				loc.y = pImg.y;
-				if(!isInAnyRegion(colorlist, loc, 200, 10))
-				{
-					img_debug->drawBox(pImg.x, pImg.y, 1, 1, 1);
-					updateModel(frame, loc, -1);
-					rndSamples--;
-				}
-			}
-		}
+//		pixelloc loc;
+//		vector2d pImg;
+//		vector3d pField;
+//		int rndSamples = std::min(100, (int)locs.size());
+//		int rs = rndSamples;
+//		for(int i=0; i<1000; i++)
+//		{
+//			int length = (int) (field.field_length->getInt()); // + 2*field.boundary_width->getInt());
+//			int width = (int) (field.field_width->getInt()); // + 2*field.boundary_width->getInt());
+//			pField.x = (rand() % length) - length/2;
+//			pField.y = (rand() % width) - width/2;
+//			camera_parameters.field2image(pField, pImg);
+//			if(pImg.x > 0 && pImg.x < frame->video.getWidth() &&
+//					pImg.y > 0 && pImg.y < frame->video.getHeight())
+//			{
+//				loc.x = pImg.x;
+//				loc.y = pImg.y;
+//				if(!isInAnyRegion(colorlist, loc, 200, 10))
+//				{
+//					updateModel(frame, loc, -1);
+//					img_debug->setPixel(pImg.x, pImg.y, 1);
+//					rndSamples--;
+//					if(rndSamples <= 0)
+//						break;
+//				}
+//			}
+//		}
 
-		std::cout << "det: ";
-		for(int i=0;i<detections.size();i++)
-			std::cout << detections[i] << " ";
-
-		std::cout << "upd: ";
-		for(int i=0;i<updates.size();i++)
-			std::cout << updates[i] << " ";
-
-		std::cout << "rnd: " << (rs-rndSamples) << "/" << rs;
-		std::cout << std::endl;
-		CopytoLUT(&lut);
+//		std::chrono::duration<double> diff = std::chrono::system_clock::now()-lastUpdate;
+//		if(diff.count() > 5)
+//		{
+//			CopytoLUT(&lut);
+//			lastUpdate = std::chrono::system_clock::now();
+//		}
 	}
 
 	CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded,&(frame->video),&lut);
@@ -354,10 +611,27 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame, RenderOptions *
 	return ProcessingOk;
 }
 
+int PluginOnlineColorCalib::getColorFromModelOutput(doubleVec& output)
+{
+	int maxIdx = 0;
+	double maxValue = 0;
+	for(int i=0;i<cProp.size();i++)
+	{
+		if(output[i] > maxValue)
+		{
+			maxValue = output[i];
+			maxIdx = i;
+		}
+	}
+	if(maxValue > 0.5)
+		return cProp[maxIdx].color;
+	return 0;
+}
+
 void PluginOnlineColorCalib::CopytoLUT(LUT3D *lut) {
 
     doubleVec input(3);
-    doubleVec output(outDim);
+    doubleVec output(cProp.size());
 
     lut->lock();
 	for (int y = 0; y <= 255; y+= (0x1 << _lut->X_SHIFT)) {
@@ -366,21 +640,10 @@ void PluginOnlineColorCalib::CopytoLUT(LUT3D *lut) {
 				input[0]= (double)y;
 				input[1]= (double)u;
 				input[2]= (double)v;
-				output = model->predict(input, 0.001);
-				int maxIdx = 0;
-				double maxValue = 0;
-				for(int i=0;i<outDim;i++)
-				{
-					if(output[i] > maxValue)
-					{
-						maxValue = output[i];
-						maxIdx = i;
-					}
-				}
-				if(maxValue > 0.5)
-					lut->set(y,u,v,colorMap[maxIdx]);
-				else
-					lut->set(y,u,v,0);
+				output = model->predict(input, 0.01);
+				int color = getColorFromModelOutput(output);
+				lut->set(y, u, v, color);
+
 			}
 		}
 	}
