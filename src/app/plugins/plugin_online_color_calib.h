@@ -20,6 +20,21 @@
 #include <chrono>
 #include <lwpr.hh>
 
+#include <QThread>
+#include <QObject>
+#include <QString>
+
+#include <mutex>
+#include <condition_variable>
+
+class RobotRegions {
+public:
+	double time;
+	vector3d pos;
+	double orientation;
+	std::vector<CMVision::Region> regions;
+};
+
 class LocStamped {
 public:
 	double time;
@@ -52,67 +67,112 @@ public:
 	AngleRange angleRanges[2];
 };
 
-class PluginOnlineColorCalib : public VisionPlugin
-{
-Q_OBJECT
+class WorkerInput {
 public:
-	PluginOnlineColorCalib(FrameBuffer * _buffer, LUT3D * lut, const CameraParameters& camera_params, const RoboCupField& field);
-	virtual ~PluginOnlineColorCalib();
+	long long int number;
+	RawImage image;
+	SSL_DetectionFrame detection_frame;
+	std::vector<CMVision::Region> regions;
+};
 
-    virtual ProcessResult process(FrameData * data, RenderOptions * options);
-    virtual VarList * getSettings();
-    virtual string getName();
+class Worker: public QObject {
+	Q_OBJECT
+public:
+	Worker(LUT3D * lut, const CameraParameters& camera_params, const RoboCupField& field);
+	virtual ~Worker();
+	virtual void update(FrameData * frame);
+	virtual void CopytoLUT(LUT3D *lut);
+	virtual void GetLocs(std::vector<LocStamped>& locs);
 
-protected slots:
-  void slotUpdateTriggered();
-  void slotUpdateVisTriggered();
-private:
-    virtual bool isInAnyRegion(CMVision::ColorRegionList * colorlist, pixelloc& loc, double maxArea, double margin);
-    virtual void updateModel(FrameData * frame, pixelloc& loc, int clazz);
-    virtual void CopytoLUT(LUT3D *lut);
-    virtual int getColorFromModelOutput(doubleVec& output);
-    virtual void regionFieldDim(CMVision::Region* region, int clazz, double& width, double& height);
-    virtual void regionDesiredPixelDim(CMVision::Region* region, int clazz, int& width, int& height);
-    virtual void addRegionCross(
-    		const SSL_DetectionFrame * detection_frame,
-    		std::vector<LocStamped*>& locs,
-    		int clazz,
-    		int targetClazz,
-    		CMVision::Region* region,
-    		int width,
-    		int height,
-    		int exclWidth,
-    		int exclHeight,
-			int offset);
-    virtual void addRegionEllipse(
-    		const SSL_DetectionFrame * detection_frame,
-    		std::vector<LocStamped*>& locs,
-    		int clazz,
-    		int targetClazz,
-    		CMVision::Region* region,
-    		int width,
-    		int height,
-    		int exclWidth,
-    		int exclHeight,
-			int offset);
-    virtual bool isInAngleRange(vector3d& pField, int clazz, BotPosStamped* botPos);
-    LUT3D * _lut;
-    YUVLUT lut;
-    VarList * _settings;
-    VarBool * _v_enable;
-    VarBool * _v_lifeUpdate;
-    VarBool * _v_removeOutlierBlobs;
-    VarTrigger * _updGlob;
-    VarTrigger * _updVis;
+	YUVLUT local_lut;
+	LUT3D * global_lut;
 
-    const CameraParameters& camera_parameters;
-    const RoboCupField& field;
-
-	LWPR_Object* model;
+	VarBool * _v_lifeUpdate;
+	VarBool * _v_removeOutlierBlobs;
 
 	std::vector<LocStamped*> locs;
-	std::vector<BotPosStamped*> botPoss;
 	std::vector<ClazzProperties> cProp;
+	std::vector<int> color2Clazz;
+
+	bool globalLutUpdate;
+public slots:
+	void process();
+signals:
+	void finished();
+	void error(QString err);
+
+private:
+	virtual void updateModel(RawImage& image, pixelloc& loc, int clazz);
+
+	virtual void processRegions(const SSL_DetectionFrame * detection_frame, std::vector<CMVision::Region>& regions);
+//	virtual void updateRobotRegions(const SSL_DetectionFrame * detection_frame,
+//			std::vector<RobotRegions*>& robotRegionsList);
+	virtual void updateBotPositions(const SSL_DetectionFrame * detection_frame,
+			std::vector<BotPosStamped*>& botPoss);
+	virtual void updateLocs(const SSL_DetectionFrame * detection_frame,
+			std::vector<LocStamped*>& locs);
+
+	virtual int getColorFromModelOutput(doubleVec& output);
+
+	virtual void regionFieldDim(CMVision::Region* region, int clazz,
+			double& width, double& height);
+	virtual void regionDesiredPixelDim(CMVision::Region* region, int clazz,
+			int& width, int& height);
+	virtual bool isInAngleRange(vector3d& pField, int clazz,
+			BotPosStamped* botPos);
+
+	virtual void addRegion(const SSL_DetectionFrame * detection_frame,
+			std::vector<LocStamped*>& locs, int clazz, float x, float y,
+			double prop = 1);
+	virtual void addRegionCross(const SSL_DetectionFrame * detection_frame,
+			std::vector<LocStamped*>& locs, int clazz, int targetClazz,
+			CMVision::Region* region, int width, int height, int exclWidth,
+			int exclHeight, int offset);
+	virtual void addRegionEllipse(const SSL_DetectionFrame * detection_frame,
+			std::vector<LocStamped*>& locs, int clazz, int targetClazz,
+			CMVision::Region* region, int width, int height, int exclWidth,
+			int exclHeight, int offset);
+
+	// synchronization
+	std::mutex d_mutex;
+	std::mutex mutex_input;
+	std::mutex mutex_locs;
+	std::condition_variable d_condition;
+
+	// input data
+	WorkerInput input;
+
+	// state
+	const CameraParameters& camera_parameters;
+	const RoboCupField& field;
+
+	LWPR_Object* model;
+	float robot_tracking_time;
+
+	std::vector<BotPosStamped*> botPoss;
+	std::vector<RobotRegions*> robotRegionsList;
+};
+
+class PluginOnlineColorCalib: public VisionPlugin {
+	Q_OBJECT
+public:
+	PluginOnlineColorCalib(FrameBuffer * _buffer, LUT3D * lut,
+			const CameraParameters& camera_params, const RoboCupField& field);
+	virtual ~PluginOnlineColorCalib();
+
+	virtual ProcessResult process(FrameData * data, RenderOptions * options);
+	virtual VarList * getSettings();
+	virtual string getName();
+
+protected slots:
+	void slotUpdateTriggered();
+private:
+
+	VarList * _settings;
+	VarBool * _v_enable;
+	VarTrigger * _updGlob;
+	Worker* worker;
+
 };
 
 #endif /* SRC_APP_PLUGINS_PLUGIN_ONLINE_COLOR_CALIB_H_ */
