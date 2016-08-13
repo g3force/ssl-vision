@@ -33,7 +33,14 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(FrameBuffer * _buffer,
 			_updGlob = new VarTrigger("UpdateGlob", "Update Global LUT"));
 	connect(_updGlob, SIGNAL(signalTriggered()), this,
 			SLOT(slotUpdateTriggered()));
+
+	_settings->addChild(
+			_resetModel = new VarTrigger("Reset", "Reset Model"));
+	connect(_resetModel, SIGNAL(signalTriggered()), this,
+			SLOT(slotResetModelTriggered()));
+
 	_settings->addChild(_v_enable = new VarBool("enabled", false));
+	_settings->addChild(_v_debug = new VarBool("debug", false));
 	_settings->addChild(worker->_v_lifeUpdate);
 	_settings->addChild(worker->_v_removeOutlierBlobs);
 
@@ -51,6 +58,10 @@ void PluginOnlineColorCalib::slotUpdateTriggered() {
 	worker->globalLutUpdate = true;
 }
 
+void PluginOnlineColorCalib::slotResetModelTriggered() {
+	worker->resetModel();
+}
+
 Worker::Worker(LUT3D * lut, const CameraParameters& camera_params, const RoboCupField& field) :
 		cProp(5), color2Clazz(10, 0), camera_parameters(camera_params), field(field) {
 	global_lut = lut;
@@ -61,10 +72,10 @@ Worker::Worker(LUT3D * lut, const CameraParameters& camera_params, const RoboCup
 
 	cProp[0].color = CH_ORANGE;
 	color2Clazz[CH_ORANGE] = 0;
-	cProp[0].height = 21;
+	cProp[0].height = 42;
 	cProp[0].minDist = 150;
 	cProp[0].maxDist = 20000;
-	cProp[0].radius = 21;
+	cProp[0].radius = 22;
 	cProp[0].nAngleRanges = 0;
 
 	cProp[1].color = CH_YELLOW;
@@ -95,18 +106,32 @@ Worker::Worker(LUT3D * lut, const CameraParameters& camera_params, const RoboCup
 		cProp[i].angleRanges[1].max = 165.0 / 180.0 * M_PI;
 	}
 
-	model = new LWPR_Object(3, cProp.size());
-	doubleVec norm(3, 255);
-	model->normIn(norm);
-	model->setInitD(500);
-	model->wGen(0.1);
+	model = NULL;
+	resetModel();
 
-	robot_tracking_time = 1;
+	robot_tracking_time = 2;
 	this->input.number = -1;
 	globalLutUpdate = false;
 }
 
 Worker::~Worker() {
+}
+
+void Worker::resetModel()
+{
+	mutex_model.lock();
+	if(model != NULL)
+	{
+		delete model;
+	}
+	model = new LWPR_Object(3, cProp.size());
+	doubleVec norm(3, 255);
+	model->normIn(norm);
+	model->setInitD(500);
+	model->wGen(0.1);
+	model->initLambda(0.9999);
+	model->finalLambda(0.99999);
+	mutex_model.unlock();
 }
 
 void Worker::process() {
@@ -180,6 +205,12 @@ void Worker::update(FrameData * frame) {
 
 void Worker::updateModel(RawImage& image, pixelloc& loc,
 		int clazz) {
+	if(loc.x < 0 || loc.x >= image.getWidth()
+			|| loc.y < 0 || loc.y >= image.getHeight())
+	{
+		return;
+	}
+
 	yuv color;
 	uyvy color2 = *((uyvy*) (image.getData()
 			+ (sizeof(uyvy)
@@ -200,12 +231,14 @@ void Worker::updateModel(RawImage& image, pixelloc& loc,
 	for (int i = 0; i < v_out.size(); i++)
 		v_out[i] = (clazz == i);
 
+	mutex_model.lock();
 	doubleVec out = model->update(v_in, v_out);
 	int col = getColorFromModelOutput(out);
 	local_lut.set(color.y, color.u, color.v, col);
 	if (_v_lifeUpdate->getBool()) {
 		global_lut->set(color.y, color.u, color.v, col);
 	}
+	mutex_model.unlock();
 }
 
 int Worker::getColorFromModelOutput(doubleVec& output) {
@@ -228,6 +261,7 @@ void Worker::CopytoLUT(LUT3D *lut) {
 	doubleVec output(cProp.size());
 
 	lut->lock();
+	mutex_model.lock();
 	for (int y = 0; y <= 255; y += (0x1 << global_lut->X_SHIFT)) {
 		for (int u = 0; u <= 255; u += (0x1 << global_lut->Y_SHIFT)) {
 			for (int v = 0; v <= 255; v += (0x1 << global_lut->Z_SHIFT)) {
@@ -241,6 +275,7 @@ void Worker::CopytoLUT(LUT3D *lut) {
 			}
 		}
 	}
+	mutex_model.unlock();
 	lut->unlock();
 }
 
@@ -333,11 +368,12 @@ void Worker::addRegionEllipse(
 	int maxY = height / 2 + offset;
 	int maxX = width / 2 + offset;
 	for (int y = -maxY; y <= maxY; y += 1) {
-		if (abs(y) < exclHeight)
-			continue;
 		for (int x = -maxX; x <= maxX; x += 1) {
-			if (abs(x) < exclWidth)
+			if (x * x * exclWidth * exclWidth / 4 + y * y * exclHeight * exclHeight / 4
+					< exclWidth * exclWidth * exclHeight * exclHeight / 16)
+			{
 				continue;
+			}
 			if (x * x * maxY * maxY + y * y * maxX * maxX
 					<= maxY * maxY * maxX * maxX) {
 				int rx = region->cen_x + x;
@@ -623,18 +659,18 @@ void Worker::processRegions(const SSL_DetectionFrame * detection_frame, std::vec
 		camera_parameters.image2field(pField, pImg,
 				cProp[clazz].height);
 
-		if (pField.x
-				> -(field.field_length->getDouble()) / 2
-						- field.boundary_width->getDouble()
-				&& pField.x
-						< field.field_length->getDouble() / 2
-								+ field.boundary_width->getDouble()
-				&& pField.y
-						> -field.field_width->getDouble() / 2
-								- field.boundary_width->getDouble()
-				&& pField.y
-						< field.field_width->getDouble() / 2
-								+ field.boundary_width->getDouble()) {
+//		if (pField.x
+//				> -(field.field_length->getDouble()) / 2
+//						- field.boundary_width->getDouble()
+//				&& pField.x
+//						< field.field_length->getDouble() / 2
+//								+ field.boundary_width->getDouble()
+//				&& pField.y
+//						> -field.field_width->getDouble() / 2
+//								- field.boundary_width->getDouble()
+//				&& pField.y
+//						< field.field_width->getDouble() / 2
+//								+ field.boundary_width->getDouble()) {
 			double dist;
 			BotPosStamped* botPos = findNearestBotPos(botPoss, pField,
 					&dist);
@@ -662,9 +698,10 @@ void Worker::processRegions(const SSL_DetectionFrame * detection_frame, std::vec
 						addRegionEllipse(detection_frame, locs, clazz,
 								-1, region, region->width(),
 								region->height(), pWidth, pHeight, 0);
-					}
-					addRegionEllipse(detection_frame, locs, clazz,
+					} else {
+						addRegionEllipse(detection_frame, locs, clazz,
 							clazz, region, pWidth, pHeight, -1, -1, 2);
+					}
 					mutex_locs.unlock();
 				}
 			} else if (_v_removeOutlierBlobs->getBool()) {
@@ -673,7 +710,12 @@ void Worker::processRegions(const SSL_DetectionFrame * detection_frame, std::vec
 						region->width(), region->height(), -1, -1, 0);
 				mutex_locs.unlock();
 			}
-		}
+//		} else if (_v_removeOutlierBlobs->getBool()) {
+//			mutex_locs.lock();
+//			addRegionCross(detection_frame, locs, clazz, -1, region,
+//					region->width(), region->height(), -1, -1, 0);
+//			mutex_locs.unlock();
+//		}
 	}
 }
 
@@ -692,28 +734,31 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame,
 			return ProcessingFailed;
 		}
 
-		Image<raw8> * img_debug;
-		if ((img_debug = (Image<raw8> *) frame->map.get(
-				"cmv_online_color_calib")) == 0) {
-			img_debug = (Image<raw8> *) frame->map.insert(
-					"cmv_online_color_calib", new Image<raw8>());
-		}
-		img_debug->allocate(frame->video.getWidth(), frame->video.getHeight());
-		img_debug->fillColor(0);
-
-//		auto t1 = std::chrono::system_clock::now();
 		worker->update(frame);
-//		std::chrono::duration<double> diff = std::chrono::system_clock::now()-t1;
 
-		std::vector<LocStamped> locs;
-		worker->GetLocs(locs);
-		for (int i = 0; i <locs.size(); i++) {
-			raw8 color;
-			if (locs[i].clazz >= 0)
-				color = worker->cProp[locs[i].clazz].color;
-			else
-				color = 1;
-			img_debug->setPixel(locs[i].loc.x, locs[i].loc.y, color);
+		if(_v_debug->getBool())
+		{
+	//		auto t1 = std::chrono::system_clock::now();
+	//		std::chrono::duration<double> diff = std::chrono::system_clock::now()-t1;
+			Image<raw8> * img_debug;
+			if ((img_debug = (Image<raw8> *) frame->map.get(
+					"cmv_online_color_calib")) == 0) {
+				img_debug = (Image<raw8> *) frame->map.insert(
+						"cmv_online_color_calib", new Image<raw8>());
+			}
+			img_debug->allocate(frame->video.getWidth(), frame->video.getHeight());
+			img_debug->fillColor(0);
+
+			std::vector<LocStamped> locs;
+			worker->GetLocs(locs);
+			for (int i = 0; i <locs.size(); i++) {
+				raw8 color;
+				if (locs[i].clazz >= 0)
+					color = worker->cProp[locs[i].clazz].color;
+				else
+					color = 1;
+				img_debug->setPixel(locs[i].loc.x, locs[i].loc.y, color);
+			}
 		}
 	}
 

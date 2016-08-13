@@ -83,6 +83,7 @@ public:
 	virtual void update(FrameData * frame);
 	virtual void CopytoLUT(LUT3D *lut);
 	virtual void GetLocs(std::vector<LocStamped>& locs);
+	virtual void resetModel();
 
 	YUVLUT local_lut;
 	LUT3D * global_lut;
@@ -137,6 +138,7 @@ private:
 	std::mutex d_mutex;
 	std::mutex mutex_input;
 	std::mutex mutex_locs;
+	std::mutex mutex_model;
 	std::condition_variable d_condition;
 
 	// input data
@@ -166,11 +168,14 @@ public:
 
 protected slots:
 	void slotUpdateTriggered();
+	void slotResetModelTriggered();
 private:
 
 	VarList * _settings;
 	VarBool * _v_enable;
+	VarBool * _v_debug;
 	VarTrigger * _updGlob;
+	VarTrigger * _resetModel;
 	Worker* worker;
 
 };
