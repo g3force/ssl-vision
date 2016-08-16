@@ -14,7 +14,8 @@ PluginInitColorCalib::PluginInitColorCalib(FrameBuffer * _buffer,
 		const RoboCupField& field) :
 		VisionPlugin(_buffer),
 		clazz2Channel(6),
-		colors(6) {
+		rgbColors(6),
+		yuvColors(6) {
 
 	_settings = new VarList("Init Color Calib");
 
@@ -24,6 +25,7 @@ PluginInitColorCalib::PluginInitColorCalib(FrameBuffer * _buffer,
 			SLOT(slotUpdateTriggered()));
 
 	global_lut = lut;
+	local_lut = new YUVLUT(8,8,8);
 	running = false;
 	nFrames = 0;
 	nSamples = 0;
@@ -55,30 +57,40 @@ PluginInitColorCalib::PluginInitColorCalib(FrameBuffer * _buffer,
 	rgb magenta = {255,0,221};
 	rgb green = {74,255,78};
 
-	colors[0] = (blue);
-	colors[1] = (green);
-	colors[2] = (orange);
-	colors[3] = (magenta);
-	colors[4] = (yellow);
-	colors[5] = (black);
+	rgbColors[0] = (blue);
+	rgbColors[1] = (green);
+	rgbColors[2] = (orange);
+	rgbColors[3] = (magenta);
+	rgbColors[4] = (yellow);
+	rgbColors[5] = (black);
+	for(int i=0;i<6;i++)
+		yuvColors[i] = Conversions::rgb2yuv(rgbColors[i]);
 }
 
 PluginInitColorCalib::~PluginInitColorCalib() {
 }
 
 void PluginInitColorCalib::slotUpdateTriggered() {
-	local_lut.reset();
+	local_lut->reset();
 	global_lut->reset();
 	nFrames = 0;
 	nSamples = 0;
 	running = true;
 }
 
-static float colorDist(rgb& c1, rgb& c2)
+static float rgbColorDist(rgb& c1, rgb& c2)
 {
 	int r = c1.r-c2.r;
 	int g = c1.g-c2.g;
 	int b = c1.b-c2.b;
+	return abs(r)+abs(g)+abs(b);
+}
+
+static float yuvColorDist(yuv& c1, yuv& c2)
+{
+	int r = c1.u-c2.u;
+	int g = c1.v-c2.v;
+	int b = c1.y-c2.y;
 	return abs(r)+abs(g)+abs(b);
 }
 
@@ -89,29 +101,8 @@ ProcessResult PluginInitColorCalib::process(FrameData * frame,
 	if (frame == 0)
 		return ProcessingFailed;
 
-
-
-
 	if(running)
 	{
-		for(int x=0;x<frame->video.getWidth();x++)
-			{
-				for(int y=0;y<frame->video.getHeight();y++)
-				{
-					yuv color;
-					uyvy color2 = *((uyvy*) (frame->video.getData()
-							+ (sizeof(uyvy)
-									* (((y * (frame->video.getWidth())) + x) / 2))));
-					color.u = color2.u;
-					color.v = color2.v;
-					if ((x % 2) == 0) {
-						color.y = color2.y1;
-					} else {
-						color.y = color2.y2;
-					}
-				}
-			}
-
 		for(int x=0;x<frame->video.getWidth();x++)
 		{
 			for(int y=0;y<frame->video.getHeight();y++)
@@ -128,30 +119,33 @@ ProcessResult PluginInitColorCalib::process(FrameData * frame,
 					color.y = color2.y2;
 				}
 
-				rgb col = Conversions::yuv2rgb(color);
 				float minDiff = 1e10;
 				int clazz = 0;
-				for(int j=0;j<colors.size();j++)
+				for(int j=0;j<yuvColors.size();j++)
 				{
-					float diff = colorDist(col, colors[j]);
+					float diff = yuvColorDist(color, yuvColors[j]);
 					if(diff < minDiff)
 					{
 						minDiff = diff;
 						clazz = j;
 					}
 				}
-				int channel = clazz2Channel[clazz];
-				global_lut->set(color.y, color.u, color.v, channel);
 
-//				local_lut.set(color.y, color.u, color.v, local_lut.get(color.y, color.u, color.v) + 1);
+				if(clazz != 5)
+				{
+////					int channel = clazz2Channel[clazz];
+////					global_lut->set(color.y, color.u, color.v, channel);
+					int val = local_lut->get(color.y, color.u, color.v) + 1;
+					local_lut->set(color.y, color.u, color.v, val);
+				}
 			}
 		}
 		int n = frame->video.getHeight() * frame->video.getWidth();
 		nSamples+=n;
 		nFrames++;
-		if(nFrames == 30)
+		if(nFrames == 1)
 		{
-//			classify();
+			classify();
 			running = false;
 		}
 
@@ -164,13 +158,13 @@ void PluginInitColorCalib::classify()
 {
 	cv::Mat data(0, 3, CV_32F);
 	int n = 0;
-	for (int y = 0; y <= 255; y += 1) {
-		for (int u = 0; u <= 255; u += 1) {
-			for (int v = 0; v <= 255; v += 1) {
-//	for (int y = 0; y <= 255; y += (0x1 << local_lut.X_SHIFT)) {
-//			for (int u = 0; u <= 255; u += (0x1 << local_lut.Y_SHIFT)) {
-//				for (int v = 0; v <= 255; v += (0x1 << local_lut.Z_SHIFT)) {
-				int numSamples = local_lut.get(y, u, v);
+//	for (int y = 0; y <= 255; y += 1) {
+//		for (int u = 0; u <= 255; u += 1) {
+//			for (int v = 0; v <= 255; v += 1) {
+	for (int y = 0; y <= 255; y += (0x1 << local_lut->X_SHIFT)) {
+			for (int u = 0; u <= 255; u += (0x1 << local_lut->Y_SHIFT)) {
+				for (int v = 0; v <= 255; v += (0x1 << local_lut->Z_SHIFT)) {
+				int numSamples = local_lut->get(y, u, v);
 				if(numSamples > 0)
 				{
 						cv::Mat row(1,3,CV_32F);
@@ -195,55 +189,46 @@ void PluginInitColorCalib::classify()
 	memset(voting, 0, sizeof(voting));
 	for(int i=0;i<data.rows;i++)
 	{
-		int r,g,b;
-		Conversions::yuv2rgb((int)data.at<float>(i,0), (int)data.at<float>(i,1),
-				(int)data.at<float>(i,2), r, g, b);
-		rgb col = {(unsigned char)r,(unsigned char)g,(unsigned char)b};
+		yuv col = {(unsigned char)data.at<float>(i,0),
+				(unsigned char)data.at<float>(i,1),
+				(unsigned char)data.at<float>(i,2)};
 		float minDiff = 1e10;
-		int clazz = 0;
-		for(int j=0;j<colors.size();j++)
+		int colClazz = 0;
+		for(int j=0;j<yuvColors.size();j++)
 		{
-			float diff = colorDist(col, colors[j]);
+			float diff = yuvColorDist(col, yuvColors[j]);
 			if(diff < minDiff)
 			{
 				minDiff = diff;
-				clazz = j;
+				colClazz = j;
 			}
 		}
-		voting[clazz][out.at<int>(i)]++;
+		int kClazz = out.at<int>(i);
+		voting[colClazz][kClazz]++;
 	}
 
-	std::vector<int> k2Clazz(6, -1);
+	std::vector<int> k2Col(6, -1);
 
-	for(int i=0;i<6;i++)
+	for(int colClazz=0;colClazz<6;colClazz++)
 	{
 		int maxVote = -1;
-		for(int j=0;j<6;j++)
+		int bestK = -1;
+		for(int kClazz=0;kClazz<6;kClazz++)
 		{
-			if(voting[i][j] > maxVote)
+			if(k2Col[kClazz] != -1) continue;
+			if(voting[colClazz][kClazz] > maxVote)
 			{
-				bool assigned = false;
-				for(int k=0;k<6;k++)
-				{
-					if(j == k2Clazz[k])
-					{
-						assigned = true;
-						break;
-					}
-				}
-				if(!assigned)
-				{
-					k2Clazz[j] = i;
-					maxVote = voting[i][j];
-				}
+				bestK = kClazz;
+				maxVote = voting[colClazz][kClazz];
 			}
 		}
+		k2Col[bestK] = colClazz;
 	}
 
 	for(int i=0;i<data.rows;i++)
 	{
 		int o = out.at<int>(i);
-		int clazz = k2Clazz[o];
+		int clazz = k2Col[o];
 		int channel = clazz2Channel[clazz];
 		global_lut->set((int)data.at<float>(i,0),
 				(int)data.at<float>(i,1),(int)data.at<float>(i,2),channel);

@@ -40,11 +40,12 @@ private:
 	bool running;
 	int nFrames;
 	long nSamples;
-	YUVLUT local_lut;
+	LUT3D * local_lut;
 	LUT3D * global_lut;
 
 	std::vector<int> clazz2Channel;
-	std::vector<rgb> colors;
+	std::vector<rgb> rgbColors;
+	std::vector<yuv> yuvColors;
 };
 
 #endif /* SRC_APP_PLUGINS_PLUGIN_INIT_COLOR_CALIB_H_ */
