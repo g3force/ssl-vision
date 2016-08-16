@@ -45,7 +45,8 @@ StackRoboCupSSL::StackRoboCupSSL(
     _ds_udp_server_new(ds_udp_server_new),
     _ds_udp_server_old(ds_udp_server_old) {
   (void)_fb;
-  lut_yuv = new YUVLUT(4,6,6,cam_settings_filename + "-lut-yuv.xml");
+//  lut_yuv = new YUVLUT(4,6,6,cam_settings_filename + "-lut-yuv.xml");
+  lut_yuv = new YUVLUT(6,6,6,cam_settings_filename + "-lut-yuv.xml");
   lut_yuv->loadRoboCupChannels(LUTChannelMode_Numeric);
   lut_yuv->addDerivedLUT(new RGBLUT(5,5,5,""));
 
@@ -104,6 +105,7 @@ string StackRoboCupSSL::getSettingsFileName() {
   return _cam_settings_filename;
 }
 StackRoboCupSSL::~StackRoboCupSSL() {
+	stack.clear();
   delete lut_yuv;
   delete camera_parameters;
 }
