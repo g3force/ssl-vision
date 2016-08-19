@@ -139,8 +139,8 @@ void Worker::ResetModel()
 		model->normIn(norm);
 		model->setInitD(500);
 		model->wGen(0.1);
-		model->initLambda(0.9995);
-		model->finalLambda(0.9999);
+		model->initLambda(0.995);
+		model->finalLambda(0.999);
 		models.push_back(model);
 	}
 	std::cout << "Models resetted" << std::endl;
@@ -555,8 +555,8 @@ void Worker::getRegionDesiredPixelDim(CMVision::Region* region,
 	camera_parameters.field2image(pField_top, pImg_top);
 	camera_parameters.field2image(pField_bottom, pImg_bottom);
 
-	width = pImg_left.x - pImg_right.x;
-	height = pImg_top.y - pImg_bottom.y;
+	width = std::abs(pImg_left.x - pImg_right.x);
+	height = std::abs(pImg_top.y - pImg_bottom.y);
 }
 
 void Worker::getRegionFieldDim(CMVision::Region* region, int clazz,
@@ -585,8 +585,8 @@ void Worker::getRegionFieldDim(CMVision::Region* region, int clazz,
 			cProp[clazz].height);
 	camera_parameters.image2field(pField_top, pImg_top, cProp[clazz].height);
 
-	width = pField_right.x - pField_left.x;
-	height = pField_top.y - pField_bottom.y;
+	width = std::abs(pField_right.x - pField_left.x);
+	height = std::abs(pField_top.y - pField_bottom.y);
 }
 
 double normalizeAngle(double angle) {
@@ -709,8 +709,10 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame,
 	if (frame == 0)
 		return ProcessingFailed;
 
+	ColorFormat source_format = frame->video.getColorFormat();
+
 	if (_v_enable->getBool()) {
-		ColorFormat source_format = frame->video.getColorFormat();
+
 		if (source_format != COLOR_YUV422_UYVY) {
 			std::cerr << "Unsupported source format: " << source_format
 					<< std::endl;
@@ -756,16 +758,18 @@ ProcessResult PluginOnlineColorCalib::process(FrameData * frame,
 		}
 	}
 
-	Image<raw8> * img_thresholded;
-	if ((img_thresholded = (Image<raw8> *) frame->map.get(
-			"cmv_learned_threshold")) == 0) {
-		img_thresholded = (Image<raw8> *) frame->map.insert(
-				"cmv_learned_threshold", new Image<raw8>());
+	if (source_format == COLOR_YUV422_UYVY) {
+		Image<raw8> * img_thresholded;
+		if ((img_thresholded = (Image<raw8> *) frame->map.get(
+				"cmv_learned_threshold")) == 0) {
+			img_thresholded = (Image<raw8> *) frame->map.insert(
+					"cmv_learned_threshold", new Image<raw8>());
+		}
+		img_thresholded->allocate(frame->video.getWidth(),
+				frame->video.getHeight());
+		CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded,
+				&(frame->video), &worker->local_lut);
 	}
-	img_thresholded->allocate(frame->video.getWidth(),
-			frame->video.getHeight());
-	CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded,
-			&(frame->video), &worker->local_lut);
 
 	return ProcessingOk;
 }
