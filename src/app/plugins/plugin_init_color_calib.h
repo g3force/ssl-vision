@@ -36,6 +36,8 @@ private:
 	virtual void classify();
 
 	VarList * _settings;
+	const CameraParameters& cam_params;
+	const RoboCupField& field;
 	VarTrigger * _update;
 	bool running;
 	int nFrames;

@@ -15,7 +15,8 @@ PluginInitColorCalib::PluginInitColorCalib(FrameBuffer * _buffer,
 		VisionPlugin(_buffer),
 		clazz2Channel(6),
 		rgbColors(6),
-		yuvColors(6) {
+		yuvColors(6),
+		cam_params(camera_params), field(field){
 
 	_settings = new VarList("Init Color Calib");
 
@@ -53,6 +54,8 @@ PluginInitColorCalib::PluginInitColorCalib(FrameBuffer * _buffer,
 	rgb black = {0,0,0};
 	rgb orange = {156,60,38};
 	rgb yellow = {158,208,103};
+//	rgb yellow = {205,193,50};
+//	rgb yellow = {74,91,5};
 	rgb blue = {25,63,253};
 	rgb magenta = {255,0,221};
 	rgb green = {74,255,78};
@@ -91,7 +94,7 @@ static float yuvColorDist(yuv& c1, yuv& c2)
 	int r = c1.u-c2.u;
 	int g = c1.v-c2.v;
 	int b = c1.y-c2.y;
-	return abs(r)+abs(g)+abs(b);
+	return abs(r)+abs(g); //+abs(b);
 }
 
 
@@ -107,6 +110,29 @@ ProcessResult PluginInitColorCalib::process(FrameData * frame,
 		{
 			for(int y=0;y<frame->video.getHeight();y++)
 			{
+				vector2d pImg;
+				pImg.x = x;
+				pImg.y = y;
+				vector3d pField;
+				cam_params.image2field(pField, pImg, 0);
+
+				if (pField.x
+						> -(field.field_length->getDouble()) / 2
+								- field.boundary_width->getDouble()
+						&& pField.x
+								< field.field_length->getDouble() / 2
+										+ field.boundary_width->getDouble()
+						&& pField.y
+								> -field.field_width->getDouble() / 2
+										- field.boundary_width->getDouble()
+						&& pField.y
+								< field.field_width->getDouble() / 2
+										+ field.boundary_width->getDouble()) {
+					// inside
+				} else {
+					continue;
+				}
+
 				yuv color;
 				uyvy color2 = *((uyvy*) (frame->video.getData()
 						+ (sizeof(uyvy)
