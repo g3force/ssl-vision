@@ -10,6 +10,7 @@
 #include "cmvision_region.h"
 #include <algorithm>
 #include "geometry.h"
+#include <opencv2/opencv.hpp>
 
 #define CH_ORANGE 2
 #define CH_YELLOW 3
@@ -193,7 +194,7 @@ void Worker::process() {
 		}
 
 		auto t3 = std::chrono::system_clock::now();
-		processRegions(input->time, input->regions);
+		processRegions(input->image, input->time, input->regions);
 		auto t4 = std::chrono::system_clock::now();
 
 		updateLocs(input->time);
@@ -462,6 +463,70 @@ void Worker::addRegionEllipse(double time, int clazz, int targetClazz,
 	}
 }
 
+void Worker::addRegionKMeans(RawImage * img, double time, int targetClazz,
+		CMVision::Region* region, int width, int height, int offset) {
+	int maxY = height / 2 + offset;
+	int maxX = width / 2 + offset;
+	cv::Mat data(0, 3, CV_32F);
+	std::vector<pixelloc> locs;
+	std::vector<pixelloc> coords;
+	for (int y = -maxY; y <= maxY; y += 1) {
+		for (int x = -maxX; x <= maxX; x += 1) {
+			int rx = region->cen_x + x;
+			int ry = region->cen_y + y;
+			yuv color;
+			uyvy color2 = *((uyvy*) (img->getData()
+					+ (sizeof(uyvy)
+							* (((ry * (img->getWidth())) + rx) / 2))));
+			color.u = color2.u;
+			color.v = color2.v;
+			if ((x % 2) == 0) {
+				color.y = color2.y1;
+			} else {
+				color.y = color2.y2;
+			}
+			cv::Mat row(1,3,CV_32F);
+			row.at<float>(0) = color.y;
+			row.at<float>(1) = color.u;
+			row.at<float>(2) = color.v;
+			data.push_back(row);
+			pixelloc loc = {rx, ry};
+			pixelloc coord = {x, y};
+			locs.push_back(loc);
+			coords.push_back(coord);
+		}
+	}
+
+	int K = 2;
+	cv::Mat out;
+	cv::TermCriteria tc;
+	int attempts = 5;
+	int flags = cv::KMEANS_PP_CENTERS;
+	cv::kmeans(data, K, out, tc, attempts, flags);
+
+	int posClass = out.at<int>(locs.size()/2);
+
+	for(int i=0;i<locs.size();i++)
+	{
+		if (coords[i].x * coords[i].x * maxY * maxY
+			+ coords[i].y * coords[i].y * maxX * maxX
+			<= maxY * maxY * maxX * maxX) {
+			if(out.at<int>(i) == posClass
+//					&&
+			//				(locs[i].x * locs[i].x * width * width / 4
+			//				+ locs[i].y * locs[i].y * height * height / 4
+			//				<= width * width * height * height / 16)
+			)
+			{
+				addLoc(time, targetClazz, locs[i].x, locs[i].y);
+			} else {
+				addLoc(time, -1, locs[i].x, locs[i].y);
+			}
+		}
+
+	}
+}
+
 static double distanceSq(const vector3d& p1, const vector3d& p2) {
 	double dx = p1.x - p2.x;
 	double dy = p1.y - p2.y;
@@ -635,7 +700,7 @@ bool Worker::isInAngleRange(vector3d& pField, int clazz,
 
 bool regionByAreaSorter (const CMVision::Region& r1, const CMVision::Region& r2) { return (r1.area<r2.area); }
 
-void Worker::processRegions(double time, std::vector<CMVision::Region>& regions)
+void Worker::processRegions(RawImage& img, double time, std::vector<CMVision::Region>& regions)
 {
 //	std::sort(regions.begin(), regions.end(), regionByAreaSorter);
 	for(int i=0;i<regions.size(); i++)
@@ -679,16 +744,17 @@ void Worker::processRegions(double time, std::vector<CMVision::Region>& regions)
 					getRegionDesiredPixelDim(region, clazz, pWidth,
 							pHeight);
 
-					if (fWidth > cProp[clazz].radius * 2 + 10
-							|| fHeight > cProp[clazz].radius * 2 + 10) {
-						// region too large -> force decreasing size
-						addRegionEllipse(time, clazz,
-								-1, region, region->width(),
-								region->height(), pWidth, pHeight, 0);
-					} else {
-						addRegionEllipse(time, clazz,
-							clazz, region, pWidth, pHeight, -1, -1, 2);
-					}
+					addRegionKMeans(&img, time, clazz, region, pWidth, pHeight, 2);
+//					if (fWidth > cProp[clazz].radius * 2 + 10
+//							|| fHeight > cProp[clazz].radius * 2 + 10) {
+//						// region too large -> force decreasing size
+//						addRegionEllipse(time, clazz,
+//								-1, region, region->width(),
+//								region->height(), pWidth, pHeight, 0);
+//					} else {
+//						addRegionEllipse(time, clazz,
+//							clazz, region, pWidth, pHeight, -1, -1, 2);
+//					}
 				}
 			} else if (_v_removeOutlierBlobs->getBool()) {
 				addRegionCross(time, clazz, -1, region,

@@ -108,7 +108,7 @@ private:
 	virtual int getColorFromModelOutput(doubleVec& output);
 	virtual void updateModel(RawImage& image, pixelloc& loc, int clazz);
 
-	virtual void processRegions(double time, std::vector<CMVision::Region>& regions);
+	virtual void processRegions(RawImage& image, double time, std::vector<CMVision::Region>& regions);
 
 	virtual BotPosStamped* findNearestBotPos(const vector3d& loc,	double* dist, BotPosStamped* exceptThisBot = 0);
 
@@ -125,6 +125,8 @@ private:
 	virtual void addRegionEllipse(double time, int clazz, int targetClazz,
 			CMVision::Region* region, int width, int height, int exclWidth,
 			int exclHeight, int offset);
+	virtual void addRegionKMeans(RawImage * img, double time, int targetClazz,
+			CMVision::Region* region, int width, int height, int offset);
 
 	// synchronization
 	std::mutex mutex_sync;
