@@ -65,7 +65,8 @@ void PluginOnlineColorCalib::slotResetModelTriggered() {
 }
 
 Worker::Worker(LUT3D * lut, const CameraParameters& camera_params, const RoboCupField& field) :
-		cProp(5), color2Clazz(10, 0), camera_parameters(camera_params), field(field) {
+		cProp(5), color2Clazz(10, 0), camera_parameters(camera_params), field(field),
+		local_lut(8,8,8) {
 	global_lut = lut;
 
 	_v_lifeUpdate = new VarBool("life update", false);
@@ -129,6 +130,8 @@ void Worker::ResetModel()
 {
 	mutex_model.lock();
 
+	local_lut.reset();
+
 	for(int i=0;i<models.size();i++)
 		delete models[i];
 	models.clear();
@@ -138,7 +141,7 @@ void Worker::ResetModel()
 		LWPR_Object* model = new LWPR_Object(3,1);
 		doubleVec norm(3, 255);
 		model->normIn(norm);
-		model->setInitD(500);
+		model->setInitD(100);
 		model->wGen(0.1);
 		model->initLambda(0.995);
 		model->finalLambda(0.999);
@@ -213,6 +216,13 @@ void Worker::process() {
 				" tModel=" << tModel.count() <<
 				" tProc=" << tProc.count() <<
 				std::endl;
+
+		std::cout << "lwpr: ";
+		for(int i=0;i<models.size();i++)
+		{
+			std::cout << models[i]->numRFS(0) << " ";
+		}
+		std::cout << std::endl;
 
 		mutex_locs.lock();
 		locs_out.clear();
@@ -305,17 +315,22 @@ void Worker::updateModel(RawImage& image, pixelloc& loc,
 	v_in[1] = color.u;
 	v_in[2] = color.v;
 
+	//	if(clazz != 0 && clazz != 3) return;
+
 	mutex_model.lock();
 	doubleVec output(models.size());
 
 	doubleVec v_out(1);
 	if(clazz >= 0)
 	{
-		v_out[0] = 1;
-		models[clazz]->update(v_in, v_out);
+//		v_out[0] = 1;
+//		doubleVec out = models[clazz]->update(v_in, v_out);
+//		output[clazz] = out[0];
 		for(int i=0;i<models.size();i++)
 		{
-			doubleVec out = models[i]->predict(v_in, 0.001);
+			v_out[0] = (clazz == i);
+			doubleVec out = models[i]->update(v_in, v_out);
+//			doubleVec out = models[i]->predict(v_in, 0.001);
 			output[i] = out[0];
 		}
 	}
@@ -328,10 +343,13 @@ void Worker::updateModel(RawImage& image, pixelloc& loc,
 		}
 	}
 
+
 	int col = getColorFromModelOutput(output);
-	local_lut.set(color.y, color.u, color.v, col);
+//	local_lut.set(color.y, color.u, color.v, col);
+	local_lut.set(color.y, color.u, color.v, cProp[clazz].color);
 	if (_v_lifeUpdate->getBool()) {
-		global_lut->set(color.y, color.u, color.v, col);
+//		global_lut->set(color.y, color.u, color.v, col);
+		global_lut->set(color.y, color.u, color.v, cProp[clazz].color);
 	}
 	mutex_model.unlock();
 }
@@ -465,66 +483,23 @@ void Worker::addRegionEllipse(double time, int clazz, int targetClazz,
 
 void Worker::addRegionKMeans(RawImage * img, double time, int targetClazz,
 		CMVision::Region* region, int width, int height, int offset) {
-	int maxY = height / 2 + offset;
-	int maxX = width / 2 + offset;
-	cv::Mat data(0, 3, CV_32F);
-	std::vector<pixelloc> locs;
-	std::vector<pixelloc> coords;
-	for (int y = -maxY; y <= maxY; y += 1) {
-		for (int x = -maxX; x <= maxX; x += 1) {
-			int rx = region->cen_x + x;
-			int ry = region->cen_y + y;
-			yuv color;
-			uyvy color2 = *((uyvy*) (img->getData()
-					+ (sizeof(uyvy)
-							* (((ry * (img->getWidth())) + rx) / 2))));
-			color.u = color2.u;
-			color.v = color2.v;
-			if ((x % 2) == 0) {
-				color.y = color2.y1;
-			} else {
-				color.y = color2.y2;
-			}
-			cv::Mat row(1,3,CV_32F);
-			row.at<float>(0) = color.y;
-			row.at<float>(1) = color.u;
-			row.at<float>(2) = color.v;
-			data.push_back(row);
-			pixelloc loc = {rx, ry};
-			pixelloc coord = {x, y};
-			locs.push_back(loc);
-			coords.push_back(coord);
-		}
-	}
 
-	int K = 2;
-	cv::Mat out;
-	cv::TermCriteria tc;
-	int attempts = 5;
-	int flags = cv::KMEANS_PP_CENTERS;
-	cv::kmeans(data, K, out, tc, attempts, flags);
-
-	int posClass = out.at<int>(locs.size()/2);
-
-	for(int i=0;i<locs.size();i++)
+	Blob blob;
+	blob.center.x = region->cen_x;
+	blob.center.y = region->cen_y;
+	blob.height = height;
+	blob.width = width;
+	bool ok = blobDetector.detectBlob(img, &blob, 0);
+	if(ok)
 	{
-		if (coords[i].x * coords[i].x * maxY * maxY
-			+ coords[i].y * coords[i].y * maxX * maxX
-			<= maxY * maxY * maxX * maxX) {
-			if(out.at<int>(i) == posClass
-//					&&
-			//				(locs[i].x * locs[i].x * width * width / 4
-			//				+ locs[i].y * locs[i].y * height * height / 4
-			//				<= width * width * height * height / 16)
-			)
-			{
-				addLoc(time, targetClazz, locs[i].x, locs[i].y);
-			} else {
-				addLoc(time, -1, locs[i].x, locs[i].y);
-			}
+		for(int i=0;i<blob.detectedPixels.size();i++)
+		{
+			int x = blob.center.x + blob.detectedPixels[i].x;
+			int y = blob.center.y + blob.detectedPixels[i].y;
+			addLoc(time, targetClazz, x, y);
 		}
-
 	}
+
 }
 
 static double distanceSq(const vector3d& p1, const vector3d& p2) {

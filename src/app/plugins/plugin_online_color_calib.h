@@ -27,6 +27,8 @@
 #include <mutex>
 #include <condition_variable>
 
+#include "BlobDetector.h"
+
 class LocStamped {
 public:
 	double time;
@@ -149,6 +151,8 @@ private:
 	int max_locs;
 
 	std::vector<LocStamped*> locs;
+
+	BlobDetector blobDetector;
 };
 
 class PluginOnlineColorCalib: public VisionPlugin {

@@ -18,6 +18,17 @@
 #include "messages_robocup_ssl_detection.pb.h"
 
 #include <chrono>
+#include <QMouseEvent>
+
+#include "BlobDetector.h"
+
+class ColorClazz {
+public:
+	ColorClazz(unsigned char r, unsigned char g, unsigned char b, int clazz);
+	rgb color_rgb;
+	yuv color_yuv;
+	int clazz;
+};
 
 class PluginInitColorCalib: public VisionPlugin {
 	Q_OBJECT
@@ -26,7 +37,9 @@ public:
 			const CameraParameters& camera_params, const RoboCupField& field);
 	virtual ~PluginInitColorCalib();
 
+	virtual void addBlobs(SSL_DetectionFrame* detection_frame, RawImage* img);
 	virtual ProcessResult process(FrameData * data, RenderOptions * options);
+	virtual void mousePressEvent ( QMouseEvent * event, pixelloc loc );
 	virtual VarList * getSettings();
 	virtual string getName();
 
@@ -45,9 +58,10 @@ private:
 	LUT3D * local_lut;
 	LUT3D * global_lut;
 
-	std::vector<int> clazz2Channel;
-	std::vector<rgb> rgbColors;
-	std::vector<yuv> yuvColors;
+	std::vector<ColorClazz> colors;
+	float maxColorDist;
+
+	BlobDetector blobDetector;
 };
 
 #endif /* SRC_APP_PLUGINS_PLUGIN_INIT_COLOR_CALIB_H_ */
