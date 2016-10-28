@@ -39,7 +39,11 @@ protected:
     LUTChannelMode mode;
     bool continuing_undo;
 
+#if CV_VERSION_MAJOR < 3
     CvANN_MLP * neuronet; //Creation of the ANN object (OpenCV)
+#else
+    cv::Ptr<cv::ml::ANN_MLP> neuronet;
+#endif
     //variables used by OpenCV algorithm RunNeuralopenCV
     CvMat *realinput;
     CvMat *netout;

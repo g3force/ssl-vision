@@ -30,35 +30,44 @@ const int sizeOutLayer = 10; //Number of neurons on the output layer (also numbe
 
 
 int PluginNeuralColorCalib::TrainNeuralopenCV() {
-    CvANN_MLP_TrainParams netparams;
-    CvTermCriteria term_crit;
-    double * training;
-    training= new double [n_samples * sizeInputLayer * sizeInputLayer];
-    double * target;
-    target= new double [n_samples * sizeOutLayer * sizeOutLayer];
-    CvMat trainin;
-    CvMat trainout;
-    int interactions_ran=0;
 
+    //double * training = new double [n_samples * sizeInputLayer * sizeInputLayer];
+    //double * target = new double [n_samples * sizeOutLayer * sizeOutLayer];
+    float training[n_samples * sizeInputLayer * sizeInputLayer];
+    float target[n_samples * sizeOutLayer * sizeInputLayer];
+
+    for (unsigned int n=0; n<neuro_trainingset->size(); n++){
+        training[n] = (float) neuro_trainingset->at(n);
+    }
+    for (unsigned int n=0; n<neuro_targset->size(); n++){
+        target[n] = (float) neuro_targset->at(n);
+    }
+
+
+    CvTermCriteria term_crit;
     term_crit.max_iter =1000; //maximum number of epochs to train
     term_crit.epsilon  = 1e-5; //maximum tolerance to errors of the network during training
     term_crit.type = CV_TERMCRIT_ITER + CV_TERMCRIT_EPS; //indicates training stops either when performance or max. epochs is reached
-    netparams=CvANN_MLP_TrainParams(term_crit, CvANN_MLP_TrainParams::BACKPROP,0.1,0.1); //specifies learning algorithm, learning rate and momentum
 
-    for (unsigned int n=0; n<neuro_trainingset->size(); n++){
-        training[n] = neuro_trainingset->at(n);
-    }
-    for (unsigned int n=0; n<neuro_targset->size(); n++){
-        target[n] = neuro_targset->at(n);
-    }
+    int interactions_ran=0;
 
-    trainin = cvMat(n_samples,3,CV_64F,training);
-    trainout = cvMat(n_samples,sizeOutLayer,CV_64F,target);
+#if CV_VERSION_MAJOR < 3
+    CvANN_MLP_TrainParams netparams=CvANN_MLP_TrainParams(term_crit, CvANN_MLP_TrainParams::BACKPROP,0.1,0.1); //specifies learning algorithm, learning rate and momentum
+
+    CvMat trainin = cvMat(n_samples,3,CV_64F,training);
+    CvMat trainout = cvMat(n_samples,sizeOutLayer,CV_64F,target);
     interactions_ran = neuronet->train (&trainin, &trainout,0,0,netparams,0); //call training functions of the object
+#else
+    neuronet->setTermCriteria(term_crit);
+    neuronet->setTrainMethod(cv::ml::ANN_MLP::BACKPROP, 0.1,0.1);
+
+    cv::Mat samples(n_samples, sizeInputLayer, CV_32F, training);
+    cv::Mat responses(n_samples, sizeOutLayer, CV_32F, target);
+    interactions_ran = neuronet->train(samples, cv::ml::ROW_SAMPLE, responses);
+#endif
+
     isNetSet=true;
     return interactions_ran;
-
-
 }
 
 int PluginNeuralColorCalib::RunNeuralopenCV(double *input) {
@@ -67,8 +76,14 @@ int PluginNeuralColorCalib::RunNeuralopenCV(double *input) {
 
     if (isNetSet){ //if network is not trained do nothing
             cvSetData(realinput,input,sizeof(double)*3); //inserts the input into the OpenCV matrix format
+#if CV_VERSION_MAJOR < 3
             neuronet->predict (realinput,netout); //call prediction (ask the output) of the object for a given input.
-
+#else
+            cv::Mat samples = cv::cvarrToMat(realinput);
+            cv::Mat result;
+            neuronet->predict(samples, result);
+            *netout = result;
+#endif
             for (int j=0; j<sizeOutLayer; j++){ //inserts the output in an output array
                 tmpout=CV_MAT_ELEM(*netout,double,0,j);
                 if  (tmpout > maxout){
@@ -93,8 +108,15 @@ PluginNeuralColorCalib::PluginNeuralColorCalib(FrameBuffer * _buffer, YUVLUT * _
     continuing_undo = false;
 
     int layersinfo[sizeInputLayer]={sizeInputLayer,sizeHidLayer,sizeOutLayer};
+#if CV_VERSION_MAJOR < 3
     CvMat layer_sizes= cvMat(1,3,CV_32SC1,layersinfo);
     neuronet = new CvANN_MLP(&layer_sizes,CvANN_MLP::SIGMOID_SYM,1,1);
+#else
+    neuronet = cv::ml::ANN_MLP::create();
+    cv::Mat layer_sizes(1,3,CV_32SC1, layersinfo);
+    neuronet->setLayerSizes(layer_sizes);
+    neuronet->setActivationFunction(cv::ml::ANN_MLP::SIGMOID_SYM, 1, 1);
+#endif
 
     //variables used by OpenCV algorithm RunNeuralopenCV
     realinput = cvCreateMat(1,3,CV_64F);
