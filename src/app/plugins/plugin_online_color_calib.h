@@ -29,16 +29,9 @@
 
 #include "BlobDetector.h"
 
-class LocStamped {
+class LocLabeled {
 public:
-	double time;
 	pixelloc loc;
-	int clazz;
-};
-
-class Loc {
-public:
-	uint16_t x,y;
 	int8_t clazz;
 };
 
@@ -69,8 +62,8 @@ public:
 class WorkerInput {
 public:
 	long long int number;
-	double time;
 	RawImage image;
+	SSL_DetectionFrame detection_frame;
 	std::vector<CMVision::Region> regions;
 };
 
@@ -82,7 +75,6 @@ public:
 	virtual void update(FrameData * frame);
 	virtual void CopytoLUT(LUT3D *lut);
 	virtual void ResetModel();
-	virtual void updateBotPositions(const SSL_DetectionFrame * detection_frame);
 
 	YUVLUT local_lut;
 	LUT3D * global_lut;
@@ -93,10 +85,9 @@ public:
 
 	std::vector<ClazzProperties> cProp;
 	std::vector<int> color2Clazz;
-	std::mutex mutex_botPoss;
+
 	std::mutex mutex_locs;
-	std::vector<BotPosStamped*> botPoss;
-	std::vector<Loc> locs_out;
+	std::vector<LocLabeled> locs;
 
 	bool globalLutUpdate;
 	bool running;
@@ -107,28 +98,74 @@ signals:
 	void error(QString err);
 
 private:
-	virtual int getColorFromModelOutput(doubleVec& output);
-	virtual void updateModel(RawImage& image, pixelloc& loc, int clazz);
+	virtual int getColorFromModelOutput(
+			doubleVec& output);
 
-	virtual void processRegions(RawImage& image, double time, std::vector<CMVision::Region>& regions);
+	virtual void getRegionDesiredPixelDim(
+			const CMVision::Region* region,
+			const int clazz,
+				  int& width,
+				  int& height);
 
-	virtual BotPosStamped* findNearestBotPos(const vector3d& loc,	double* dist, BotPosStamped* exceptThisBot = 0);
+	virtual void getRegionFieldDim(
+			const CMVision::Region* region,
+			const int clazz,
+				  double& width,
+				  double& height);
 
-	virtual void getRegionFieldDim(CMVision::Region* region, int clazz, double& width, double& height);
-	virtual void getRegionDesiredPixelDim(CMVision::Region* region, int clazz,	int& width, int& height);
-	virtual bool isInAngleRange(vector3d& pField, int clazz, BotPosStamped* botPos);
+	virtual bool isInAngleRange(
+			const vector3d& pField,
+			const int clazz,
+			const BotPosStamped* botPos);
 
-	virtual void updateLocs(double time);
-	virtual LocStamped* findNearestLoc(const LocStamped& loc, double* dist, LocStamped* exceptThis = 0);
-	virtual void addLoc(double time, int clazz, float x, float y);
-	virtual void addRegionCross(double time, int clazz, int targetClazz,
-			CMVision::Region* region, int width, int height, int exclWidth,
-			int exclHeight, int offset);
-	virtual void addRegionEllipse(double time, int clazz, int targetClazz,
-			CMVision::Region* region, int width, int height, int exclWidth,
-			int exclHeight, int offset);
-	virtual void addRegionKMeans(RawImage * img, double time, int targetClazz,
-			CMVision::Region* region, int width, int height, int offset);
+	virtual BotPosStamped* findNearestBotPos(
+			const vector3d& loc,
+			double* dist,
+			const BotPosStamped* exceptThisBot = 0);
+
+	virtual void updateModel(
+			const RawImage* image,
+			const pixelloc& loc,
+			const int clazz);
+
+	virtual void updateBotPositions(
+			const SSL_DetectionFrame * detection_frame);
+
+	virtual void addRegionCross(
+			const RawImage* img,
+			const int targetClazz,
+			const CMVision::Region* region,
+			const int width,
+			const int height,
+			const int exclWidth,
+			const int exclHeight,
+			const int offset,
+				  std::vector<LocLabeled>& locs);
+
+	virtual void addRegionEllipse(
+			const RawImage* img,
+			const int targetClazz,
+			const CMVision::Region* region,
+			const int width,
+			const int height,
+			const int exclWidth,
+			const int exclHeight,
+			const int offset,
+				  std::vector<LocLabeled>& locs);
+
+	virtual void addRegionKMeans(
+			const RawImage* img,
+			const int targetClazz,
+			const CMVision::Region* region,
+			const int width,
+			const int height,
+			const int offset,
+				  std::vector<LocLabeled>& locs);
+
+	virtual void processRegions(
+			const RawImage* img,
+			const std::vector<CMVision::Region>& regions,
+				  std::vector<LocLabeled>& locs);
 
 	// synchronization
 	std::mutex mutex_sync;
@@ -146,11 +183,8 @@ private:
 
 	std::vector<LWPR_Object*> models;
 	float robot_tracking_time;
-	float loc_tracking_time;
 	int max_regions;
-	int max_locs;
-
-	std::vector<LocStamped*> locs;
+	std::vector<BotPosStamped*> botPoss;
 
 	BlobDetector blobDetector;
 };

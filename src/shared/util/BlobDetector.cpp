@@ -18,17 +18,20 @@ BlobDetector::~BlobDetector() {
 	// TODO Auto-generated destructor stub
 }
 
-void BlobDetector::addBlob(Blob& blob)
+void BlobDetector::addBlob(
+		const Blob& blob)
 {
-	Blob* b = new Blob();
-	*b = blob;
 	mutex.lock();
-	blobs.push_back(b);
+	blobs.push_back(blob);
 	mutex.unlock();
 }
 
-
-void BlobDetector::findRegion(std::vector<std::vector<int>>& classes, int x, int y, int posClass, std::vector<pixelloc>& result)
+void BlobDetector::findRegion(
+		const std::vector<std::vector<int>>& classes,
+		const int x,
+		const int y,
+		const int posClass,
+			  std::vector<pixelloc>& result)
 {
 	int height = classes.size();
 	int width = classes[0].size();
@@ -50,9 +53,13 @@ void BlobDetector::findRegion(std::vector<std::vector<int>>& classes, int x, int
 	findRegion(classes, x, y-1, posClass, result);
 }
 
-bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debug) {
-	int height = blob->height;
-	int width = blob->width;
+bool BlobDetector::detectBlob(
+		const RawImage * img,
+			  Blob& blob,
+			  Image<raw8> * img_debug)
+{
+	int height = blob.height;
+	int width = blob.width;
 	if(height % 2 == 1) height++;
 	if(width % 2 == 1) width++;
 	int maxY = height / 2;
@@ -60,8 +67,8 @@ bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debu
 	cv::Mat data(0, 3, CV_32F);
 	for (int y = -maxY; y <= maxY; y += 1) {
 		for (int x = -maxX; x <= maxX; x += 1) {
-			int rx = blob->center.x + x;
-			int ry = blob->center.y + y;
+			int rx = blob.center.x + x;
+			int ry = blob.center.y + y;
 			yuv color;
 			if(rx >= 0 && ry >= 0 && rx < img->getWidth() && ry < img->getHeight() &&
 					x * x * maxY * maxY
@@ -87,20 +94,55 @@ bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debu
 		}
 	}
 
+
 	int K = 3;
+	if(data.rows < K)
+		return false;
 	cv::Mat out;
-	cv::TermCriteria tc;
-	int attempts = 10;
-	int flags = cv::KMEANS_PP_CENTERS;
-	cv::kmeans(data, K, out, tc, attempts, flags);
+	bool repeat = true;
+	while(repeat)
+	{
+		cv::TermCriteria tc;
+		int attempts = 10;
+		int flags = cv::KMEANS_PP_CENTERS;
+		cv::Mat centers;
+		cv::setNumThreads(0);
+		cv::kmeans(data, K, out, tc, attempts, flags, centers);
+
+		repeat = false;
+		if(K > 2)
+		{
+			for(int i=0;i<centers.rows && !repeat;i++)
+			{
+				yuv col1 = {	(unsigned char) centers.at<float>(i,0),
+								(unsigned char) centers.at<float>(i,1),
+								(unsigned char) centers.at<float>(i,2) };
+				for(int j=i+1;j<centers.rows;j++)
+				{
+					yuv col2 = {(unsigned char) centers.at<float>(j,0),
+								(unsigned char) centers.at<float>(j,1),
+								(unsigned char) centers.at<float>(j,2) };
+					int du = col1.u - col2.u;
+					int dv = col1.v - col2.v;
+					int dist = abs(du) + abs(dv);
+					if(dist < 30)
+					{
+						K--;
+						repeat = true;
+						break;
+					}
+				}
+			}
+		}
+	}
 
 	std::vector<std::vector<int>> classes(height+1);
 	int i=0;
 	for (int y = -maxY; y <= maxY; y += 1) {
 		classes[y+maxY].resize(width+1);
 		for (int x = -maxX; x <= maxX; x += 1) {
-			int rx = blob->center.x + x;
-			int ry = blob->center.y + y;
+			int rx = blob.center.x + x;
+			int ry = blob.center.y + y;
 			yuv color;
 			if(rx >= 0 && ry >= 0 && rx < img->getWidth() && ry < img->getHeight() &&
 				x * x * maxY * maxY
@@ -115,7 +157,9 @@ bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debu
 	}
 
 	// find positive class
-	std::vector<int> sum_mean(K, 0);
+//	std::vector<int> sum_mean(K, 0);
+	int sum_mean[K];
+	for(int i=0;i<K;i++) sum_mean[i] = 0;
 	int s=1;
 	for(int x=-s;x<=s;x++)
 	{
@@ -147,9 +191,9 @@ bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debu
 				if(classes[y+maxY][x+maxX] == posClass)
 				{
 					numPosClass++;
-					if(img_debug != 0) img_debug->setPixel(blob->center.x+x, blob->center.y+y, 2);
+					if(img_debug != 0) img_debug->setPixel(blob.center.x+x, blob.center.y+y, 2);
 				} else {
-					if(img_debug != 0) img_debug->setPixel(blob->center.x+x, blob->center.y+y, 1);
+					if(img_debug != 0) img_debug->setPixel(blob.center.x+x, blob.center.y+y, 1);
 				}
 			}
 		}
@@ -157,14 +201,14 @@ bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debu
 
 	int sumx=0;
 	int sumy=0;
-	blob->detectedPixels.clear();
-	findRegion(classes, 0, 0, posClass, blob->detectedPixels);
+	blob.detectedPixels.clear();
+	findRegion(classes, 0, 0, posClass, blob.detectedPixels);
 
 	int lx=1e7, ly=1e7,hx=0,hy=0;
-	for(int i=0;i<blob->detectedPixels.size();i++)
+	for(int i=0;i<blob.detectedPixels.size();i++)
 	{
-		int x = blob->center.x + blob->detectedPixels[i].x;
-		int y = blob->center.y + blob->detectedPixels[i].y;
+		int x = blob.center.x + blob.detectedPixels[i].x;
+		int y = blob.center.y + blob.detectedPixels[i].y;
 		if(img_debug != 0) img_debug->setPixel(x,y, 4);
 		sumx+=x;
 		sumy+=y;
@@ -175,11 +219,11 @@ bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debu
 	}
 
 	double circleArea = M_PI * width/2.0 * height/2.0;
-	if(blob->detectedPixels.size() <= 0 || blob->detectedPixels.size() > circleArea * 0.9)
+	if(blob.detectedPixels.size() <= 0 || blob.detectedPixels.size() > circleArea * 0.9)
 	{
 		return false;
 	}
-	double relRegion = (double) blob->detectedPixels.size() / numPosClass;
+	double relRegion = (double) blob.detectedPixels.size() / numPosClass;
 	if(relRegion < 0.7)
 		return false;
 
@@ -192,37 +236,34 @@ bool BlobDetector::detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debu
 	if(ratio < 0.5)
 		return false;
 
-	int mu_x = round((double) sumx/blob->detectedPixels.size());
-	int mu_y = round((double) sumy/blob->detectedPixels.size());
-	blob->center.x = mu_x;
-	blob->center.y = mu_y;
-	if(img_debug != 0) img_debug->setPixel(blob->center.x, blob->center.y, 3);
+	int mu_x = round((double) sumx/blob.detectedPixels.size());
+	int mu_y = round((double) sumy/blob.detectedPixels.size());
+	blob.center.x = mu_x;
+	blob.center.y = mu_y;
+	if(img_debug != 0) img_debug->setPixel(blob.center.x, blob.center.y, 3);
 
 	return true;
 }
 
-void BlobDetector::update(RawImage* img, Image<raw8> * img_debug)
+void BlobDetector::update(
+		const RawImage* img,
+			  Image<raw8> * img_debug)
 {
 	mutex.lock();
-	for(std::vector<Blob*>::iterator it = blobs.begin(); it != blobs.end();)
+	for(std::vector<Blob>::iterator it = blobs.begin(); it != blobs.end();)
 	{
 		bool ok = detectBlob(img, *it, img_debug);
 		if(!ok)
 		{
-			Blob* blob = *it;
 			it = blobs.erase(it);
-			delete blob;
-			it++;
 		} else {
 			bool del = false;
-			for(std::vector<Blob*>::iterator it2 = blobs.begin(); it2 != it; it2++)
+			for(std::vector<Blob>::iterator it2 = blobs.begin(); it2 != it; it2++)
 			{
-				if((*it)->center.x == (*it2)->center.x &&
-					(*it)->center.y == (*it2)->center.y)
+				if(it->center.x == it2->center.x &&
+					it->center.y == it2->center.y)
 				{
-					Blob* blob = *it;
 					it = blobs.erase(it);
-					delete blob;
 					del = true;
 					break;
 				}

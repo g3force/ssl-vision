@@ -27,12 +27,27 @@ class BlobDetector {
 public:
 	BlobDetector();
 	virtual ~BlobDetector();
-	virtual bool detectBlob(RawImage * img, Blob* blob, Image<raw8> * img_debug);
-	virtual void findRegion(std::vector<std::vector<int>>& classes, int x, int y, int posClass, std::vector<pixelloc>& result);
-	virtual void update(RawImage* img, Image<raw8> * img_debug = 0);
-	virtual void addBlob(Blob& blob);
 
-	std::vector<Blob*> blobs;
+	virtual void addBlob(
+			const Blob& blob);
+
+	virtual void findRegion(
+			const std::vector<std::vector<int>>& classes,
+			const int x,
+			const int y,
+			const int posClass,
+				  std::vector<pixelloc>& result);
+
+	virtual bool detectBlob(
+			const RawImage * img,
+				  Blob& blob,
+				  Image<raw8> * img_debug);
+
+	virtual void update(
+			const RawImage* img,
+				  Image<raw8> * img_debug = 0);
+
+	std::vector<Blob> blobs;
 private:
 	std::mutex mutex;
 };
