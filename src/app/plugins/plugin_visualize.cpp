@@ -237,6 +237,38 @@ void PluginVisualize::DrawCameraCalibration(
     std::string description = buff;
     vis_frame->data.drawString(bx + 10, by - 2, description, cpoint_draw_color);
   }
+
+    // draw initial calibration points
+    cpoint_draw_color.set(0, 0, 255);
+    DrawInitColorCalibPoint(camera_parameters.additional_calibration_information->init_blue_x->getInt(),
+                            camera_parameters.additional_calibration_information->init_blue_y->getInt(),
+                            cpoint_draw_color, vis_frame);
+
+    cpoint_draw_color.set(0, 255, 0);
+    DrawInitColorCalibPoint(camera_parameters.additional_calibration_information->init_green_x->getInt(),
+                            camera_parameters.additional_calibration_information->init_green_y->getInt(),
+                            cpoint_draw_color, vis_frame);
+
+    cpoint_draw_color.set(255, 140, 0);
+    DrawInitColorCalibPoint(camera_parameters.additional_calibration_information->init_orange_x->getInt(),
+                            camera_parameters.additional_calibration_information->init_orange_y->getInt(),
+                            cpoint_draw_color, vis_frame);
+
+    cpoint_draw_color.set(255, 20, 147);
+    DrawInitColorCalibPoint(camera_parameters.additional_calibration_information->init_pink_x->getInt(),
+                            camera_parameters.additional_calibration_information->init_pink_y->getInt(),
+                            cpoint_draw_color, vis_frame);
+
+    cpoint_draw_color.set(255, 255, 0);
+    DrawInitColorCalibPoint(camera_parameters.additional_calibration_information->init_yellow_x->getInt(),
+                            camera_parameters.additional_calibration_information->init_yellow_y->getInt(),
+                            cpoint_draw_color, vis_frame);
+}
+
+void PluginVisualize::DrawInitColorCalibPoint(int x, int y, rgb color, VisualizationFrame *vis_frame) {
+    vis_frame->data.
+            drawBox(x-5, y -5,
+                       10, 10, color);
 }
 
 void PluginVisualize::DrawCalibrationResult(

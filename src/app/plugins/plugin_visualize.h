@@ -41,83 +41,90 @@
 */
 
 class VisualizationFrame {
-  public:
+public:
     rgbImage data;
     bool valid;
+
     VisualizationFrame() {
-      valid=false;
+        valid = false;
     }
 };
 
-class PluginVisualize : public VisionPlugin
-{
+class PluginVisualize : public VisionPlugin {
 protected:
-  VarList * _settings;
-  VarBool * _v_enabled;
-  VarBool * _v_image;
-  VarBool * _v_greyscale;
-  VarBool * _v_thresholded;
-  VarBool * _v_l_thresholded;
-  VarBool * _v_online_color_calib;
-  VarBool * _v_blobs;
-  VarBool * _v_camera_calibration;
-  VarBool * _v_calibration_result;
-  VarBool * _v_complete_sobel;
-  VarBool * _v_detected_edges;
+    VarList *_settings;
+    VarBool *_v_enabled;
+    VarBool *_v_image;
+    VarBool *_v_greyscale;
+    VarBool *_v_thresholded;
+    VarBool *_v_l_thresholded;
+    VarBool *_v_online_color_calib;
+    VarBool *_v_blobs;
+    VarBool *_v_camera_calibration;
+    VarBool *_v_calibration_result;
+    VarBool *_v_complete_sobel;
+    VarBool *_v_detected_edges;
 
-  const CameraParameters& camera_parameters;
-  const RoboCupField& real_field;
+    const CameraParameters &camera_parameters;
+    const RoboCupField &real_field;
 
-  LUT3D * _threshold_lut;
-  greyImage* edge_image;
-  greyImage* temp_grey_image;
+    LUT3D *_threshold_lut;
+    greyImage *edge_image;
+    greyImage *temp_grey_image;
 
-  void drawFieldArc(
-      const GVector::vector3d<double>& center,
-      double radius, double theta1, double theta2, int steps,
-      VisualizationFrame* vis_frame,
-      unsigned char r = 255, unsigned char g = 100, unsigned char b = 100);
-  void drawFieldLine(
-      const GVector::vector3d<double>& start,
-      const GVector::vector3d<double>& end, int steps,
-      VisualizationFrame* vis_frame,
-      unsigned char r = 255, unsigned char g = 100, unsigned char b = 100);
+    void drawFieldArc(
+            const GVector::vector3d<double> &center,
+            double radius, double theta1, double theta2, int steps,
+            VisualizationFrame *vis_frame,
+            unsigned char r = 255, unsigned char g = 100, unsigned char b = 100);
 
-  void DrawCameraImage(FrameData* data, VisualizationFrame* vis_frame);
+    void drawFieldLine(
+            const GVector::vector3d<double> &start,
+            const GVector::vector3d<double> &end, int steps,
+            VisualizationFrame *vis_frame,
+            unsigned char r = 255, unsigned char g = 100, unsigned char b = 100);
 
-  void DrawThresholdedImage(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawCameraImage(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawLearnedThresholdedImage(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawThresholdedImage(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawOnlineColorCalibImage(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawLearnedThresholdedImage(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawBlobs(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawOnlineColorCalibImage(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawCameraCalibration(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawBlobs(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawCalibrationResult(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawCameraCalibration(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawSobelImage(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawCalibrationResult(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawDetectedEdges(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawSobelImage(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawEdgeTangent(
-      const GVector::vector2d<double>& image_point,
-      const GVector::vector3d<double>& field_point,
-      const GVector::vector3d<double>& field_tangent,
-      VisualizationFrame* vis_frame, rgb edge_draw_color);
+    void DrawDetectedEdges(FrameData *data, VisualizationFrame *vis_frame);
 
-  void DrawSearchCorridors(FrameData* data, VisualizationFrame* vis_frame);
+    void DrawInitColorCalibPoint(int x, int y, rgb color, VisualizationFrame *vis_frame);
+
+    void DrawEdgeTangent(
+            const GVector::vector2d<double> &image_point,
+            const GVector::vector3d<double> &field_point,
+            const GVector::vector3d<double> &field_tangent,
+            VisualizationFrame *vis_frame, rgb edge_draw_color);
+
+    void DrawSearchCorridors(FrameData *data, VisualizationFrame *vis_frame);
+
 public:
-  PluginVisualize(FrameBuffer* _buffer, const CameraParameters& camera_params,
-                  const RoboCupField& real_field);
+    PluginVisualize(FrameBuffer *_buffer, const CameraParameters &camera_params,
+                    const RoboCupField &real_field);
 
-  ~PluginVisualize();
+    ~PluginVisualize();
 
-   void setThresholdingLUT(LUT3D * threshold_lut);
-   virtual ProcessResult process(FrameData * data, RenderOptions * options);
-   virtual VarList * getSettings();
-   virtual string getName();
+    void setThresholdingLUT(LUT3D *threshold_lut);
+
+    virtual ProcessResult process(FrameData *data, RenderOptions *options);
+
+    virtual VarList *getSettings();
+
+    virtual string getName();
 };
 
 #endif

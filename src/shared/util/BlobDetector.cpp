@@ -3,6 +3,7 @@
  *
  *  Created on: Aug 22, 2016
  *      Author: Nicolai Ommer <nicolai.ommer@gmail.com>
+ *      Mark Geiger <markgeiger@posteo.de>
  */
 
 #include "BlobDetector.h"

@@ -3,6 +3,7 @@
  *
  *  Created on: Aug 12, 2016
  *      Author: Nicolai Ommer <nicolai.ommer@gmail.com>
+ *      Mark Geiger <markgeiger@posteo.de>
  */
 
 #ifndef SRC_APP_PLUGINS_PLUGIN_INIT_COLOR_CALIB_H_
@@ -24,44 +25,61 @@
 
 class ColorClazz {
 public:
-	ColorClazz(unsigned char r, unsigned char g, unsigned char b, int clazz);
-	rgb color_rgb;
-	yuv color_yuv;
-	int clazz;
+    ColorClazz(unsigned char r, unsigned char g, unsigned char b, int clazz);
+
+    rgb color_rgb;
+    yuv color_yuv;
+    int clazz;
 };
 
-class PluginInitColorCalib: public VisionPlugin {
-	Q_OBJECT
-public:
-	PluginInitColorCalib(FrameBuffer * _buffer, LUT3D * lut,
-			const CameraParameters& camera_params, const RoboCupField& field);
-	virtual ~PluginInitColorCalib();
+class PluginInitColorCalib : public VisionPlugin {
+Q_OBJECT
 
-	virtual void addBlobs(SSL_DetectionFrame* detection_frame, RawImage* img);
-	virtual ProcessResult process(FrameData * data, RenderOptions * options);
-	virtual void mousePressEvent ( QMouseEvent * event, pixelloc loc );
-	virtual VarList * getSettings();
-	virtual string getName();
+public:
+    PluginInitColorCalib(FrameBuffer *_buffer, LUT3D *lut,
+                         const CameraParameters &camera_params, const RoboCupField &field);
+
+    virtual ~PluginInitColorCalib();
+
+    virtual ProcessResult process(FrameData *data, RenderOptions *options);
+
+    virtual VarList *getSettings();
+
+    virtual string getName();
+
+    virtual void mousePressEvent(QMouseEvent *event, pixelloc loc);
+
+    virtual void mouseReleaseEvent(QMouseEvent *event, pixelloc loc);
+
+    virtual void mouseMoveEvent(QMouseEvent *event, pixelloc loc);
 
 protected slots:
-	void slotUpdateTriggered();
+    void slotUpdateTriggeredInitial();
+
 private:
-	virtual void classify();
+    VarList *_settings;
+    const CameraParameters &cam_params;
+    const RoboCupField &field;
+    VarTrigger *_update;
+    bool running;
+    int nFrames;
+    long nSamples;
+    LUT3D *local_lut;
+    LUT3D *global_lut;
 
-	VarList * _settings;
-	const CameraParameters& cam_params;
-	const RoboCupField& field;
-	VarTrigger * _update;
-	bool running;
-	int nFrames;
-	long nSamples;
-	LUT3D * local_lut;
-	LUT3D * global_lut;
+    std::vector<ColorClazz> colors;
+    float maxColorDist;
 
-	std::vector<ColorClazz> colors;
-	float maxColorDist;
+    BlobDetector blobDetector;
 
-	BlobDetector blobDetector;
+    VarDouble *drag_x;
+    VarDouble *drag_y;
+
+    bool doing_drag;
+
+    void addColorToClazz(FrameData *frame, int x, int y, int clazz);
+
+    bool setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y);
 };
 
 #endif /* SRC_APP_PLUGINS_PLUGIN_INIT_COLOR_CALIB_H_ */

@@ -3,6 +3,7 @@
  *
  *  Created on: Jul 19, 2016
  *      Author: Nicolai Ommer <nicolai.ommer@gmail.com>
+ *      Mark Geiger <markgeiger@posteo.de>
  */
 
 #ifndef SRC_APP_PLUGINS_PLUGIN_ONLINE_COLOR_CALIB_H_

@@ -140,6 +140,8 @@ public:
       VarDouble* control_point_field_xs[kNumControlPoints];
       VarDouble* control_point_field_ys[kNumControlPoints];
 
+      VarDouble* blueMarker_x;
+
       VarDouble* initial_distortion;
       VarDouble* camera_height;
       VarDouble* line_search_corridor_width;
@@ -153,6 +155,21 @@ public:
       VarDouble* cov_ls_y;
 
       VarDouble* pointSeparation;
+
+      VarDouble* init_orange_x;
+      VarDouble* init_orange_y;
+
+      VarDouble* init_yellow_x;
+      VarDouble* init_yellow_y;
+
+      VarDouble* init_blue_x;
+      VarDouble* init_blue_y;
+
+      VarDouble* init_pink_x;
+      VarDouble* init_pink_y;
+
+      VarDouble* init_green_x;
+      VarDouble* init_green_y;
 
   private:
       RoboCupField* field;
