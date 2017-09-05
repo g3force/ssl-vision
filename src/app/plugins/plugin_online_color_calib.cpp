@@ -7,10 +7,6 @@
  */
 
 #include "plugin_online_color_calib.h"
-#include <iostream>
-#include "cmvision_region.h"
-#include <algorithm>
-#include "geometry.h"
 #include <opencv2/opencv.hpp>
 
 #define CH_ORANGE 2
@@ -76,7 +72,7 @@ Worker::Worker(
         color2Clazz(10, 0),
         camera_parameters(camera_params),
         field(field),
-        local_lut(8, 8, 8) {
+        local_lut(6, 6, 6) {
     global_lut = lut;
 
     _v_lifeUpdate = new VarBool("life update", false);
@@ -136,7 +132,6 @@ Worker::~Worker() {
 
 void Worker::ResetModel() {
     mutex_model.lock();
-
     local_lut.reset();
 
     for (int i = 0; i < models.size(); i++)
@@ -162,7 +157,6 @@ void Worker::CopytoLUT(
     doubleVec input(3);
     doubleVec output(cProp.size());
 
-    lut->lock();
     mutex_model.lock();
     for (int y = 0; y <= 255; y += (0x1 << global_lut->X_SHIFT)) {
         for (int u = 0; u <= 255; u += (0x1 << global_lut->Y_SHIFT)) {
@@ -175,12 +169,23 @@ void Worker::CopytoLUT(
                     output[i] = out[0];
                 }
                 int color = getColorFromModelOutput(output);
-                lut->set(y, u, v, color);
+                local_lut.set(y, u, v, color);
             }
         }
     }
     mutex_model.unlock();
+
+    lut->lock();
+    for (int y = 0; y <= 255; y += (0x1 << global_lut->X_SHIFT)) {
+        for (int u = 0; u <= 255; u += (0x1 << global_lut->Y_SHIFT)) {
+            for (int v = 0; v <= 255; v += (0x1 << global_lut->Z_SHIFT)) {
+                int color = local_lut.get(y, u, v);
+                lut->set(y, u, v, color);
+            }
+        }
+    }
     lut->unlock();
+
 }
 
 static yuv getColorFromImage(
@@ -309,7 +314,7 @@ bool Worker::isInAngleRange(
         const int clazz,
         const BotPosStamped *botPos) {
     bool inAngleRange = true;
-    if (cProp[clazz].nAngleRanges > 0) {
+    if (cProp[clazz].nAngleRanges > 0.01) {
         inAngleRange = false;
         vector2d regionDir;
         regionDir.x = pField.x - botPos->pos.x;
@@ -379,17 +384,8 @@ void Worker::updateModel(
         output[i] = out[0];
     }
 
-//	int col = getColorFromModelOutput(output);
     int col = cProp[clazz].color;
     mutex_model.unlock();
-    int curCol = local_lut.get(color.y, color.u, color.v);
-    if (curCol != 0 && curCol != col) {
-        std::cout << "Toggeled color: " << curCol << "->" << col << std::endl;
-    }
-    local_lut.set(color.y, color.u, color.v, col);
-    if (_v_lifeUpdate->getBool()) {
-        global_lut->set(color.y, color.u, color.v, col);
-    }
 }
 
 void Worker::updateBotPositions(
@@ -469,43 +465,6 @@ void Worker::addRegionCross(
     }
 }
 
-void Worker::addRegionEllipse(
-        const RawImage *img,
-        const int targetClazz,
-        const CMVision::Region *region,
-        const int width,
-        const int height,
-        const int exclWidth,
-        const int exclHeight,
-        const int offset,
-        std::vector<LocLabeled> &locs) {
-    int maxY = height / 2 + offset;
-    int maxX = width / 2 + offset;
-    for (int y = -maxY; y <= maxY; y += 1) {
-        for (int x = -maxX; x <= maxX; x += 1) {
-            if (x * x * exclWidth * exclWidth / 4 + y * y * exclHeight * exclHeight / 4
-                < exclWidth * exclWidth * exclHeight * exclHeight / 16) {
-                continue;
-            }
-            if (x * x * maxY * maxY + y * y * maxX * maxX
-                <= maxY * maxY * maxX * maxX) {
-                pixelloc loc;
-                loc.x = region->cen_x + x;
-                loc.y = region->cen_y + y;
-
-                LocLabeled ll;
-                ll.loc = loc;
-                if (x * x * width * width / 4 + y * y * height * height / 4
-                    <= width * width * height * height / 16)
-                    ll.clazz = targetClazz;
-                else
-                    ll.clazz = -1;
-                locs.push_back(ll);
-            }
-        }
-    }
-}
-
 void Worker::addRegionKMeans(
         const RawImage *img,
         const int targetClazz,
@@ -521,18 +480,15 @@ void Worker::addRegionKMeans(
     blob.width = width + offset;
     bool ok = blobDetector.detectBlob(img, blob, 0);
     if (ok) {
-        int minX = std::min(region->x1,region->x2);
-        int maxX = std::max(region->x1,region->x2);
-        int minY = std::min(region->y1,region->y2);
-        int maxY = std::max(region->y1,region->y2);
+        int minX = std::min(region->x1, region->x2);
+        int maxX = std::max(region->x1, region->x2);
+        int minY = std::min(region->y1, region->y2);
+        int maxY = std::max(region->y1, region->y2);
 
-        for (int x = minX; x < maxX; x++)
-        {
-            for (int y = minY; y < maxY; y++)
-            {
+        for (int x = minX; x < maxX; x++) {
+            for (int y = minY; y < maxY; y++) {
                 bool setPixel = false;
-                for (int i = 0; i < blob.detectedPixels.size(); i++)
-                {
+                for (int i = 0; i < blob.detectedPixels.size(); i++) {
                     // update model with pixel detected inside a blob
                     pixelloc loc;
                     loc.x = blob.center.x + blob.detectedPixels[i].x;
@@ -546,11 +502,10 @@ void Worker::addRegionKMeans(
                         break;
                     }
                 }
-                if (!setPixel)
-                {
+                if (!setPixel) {
                     // set pixel inside of region but not in blob -1
                     LocLabeled ll;
-                    ll.loc = {x,y};
+                    ll.loc = {x, y};
                     ll.clazz = -1;
                     locs.push_back(ll);
                 }
@@ -576,23 +531,23 @@ void Worker::processRegions(
         double dist;
         BotPosStamped *botPos = findNearestBotPos(pField,
                                                   &dist);
+
+        int pWidth, pHeight;
+        getRegionDesiredPixelDim(region, clazz, pWidth,
+                                 pHeight);
+
         if (dist < cProp[clazz].maxDist) {
             double fWidth, fHeight;
             getRegionFieldDim(region, clazz, fWidth, fHeight);
 
             if (dist < cProp[clazz].minDist
                 || !isInAngleRange(pField, clazz, botPos)) {
-                // region too narrow / not in angle range -> unwanted
                 if (_v_removeOutlierBlobs->getBool()) {
                     addRegionCross(img, -1, region,
                                    region->width(), region->height(),
                                    -1, -1, 0, locs);
                 }
             } else {
-                int pWidth, pHeight;
-                getRegionDesiredPixelDim(region, clazz, pWidth,
-                                         pHeight);
-
                 addRegionKMeans(img, clazz, region, pWidth, pHeight, 2, locs);
             }
         } else if (_v_removeOutlierBlobs->getBool()) {
@@ -679,6 +634,11 @@ void Worker::process() {
         mutex_locs.lock();
         this->locs = locs;
         mutex_locs.unlock();
+
+        if (_v_lifeUpdate->getBool()) {
+            globalLutUpdate = true;
+            // maybe dont do this always... but also n-frame based
+        }
 
         if (globalLutUpdate) {
             auto t1 = std::chrono::system_clock::now();

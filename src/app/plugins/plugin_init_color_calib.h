@@ -64,7 +64,6 @@ private:
     bool running;
     int nFrames;
     long nSamples;
-    LUT3D *local_lut;
     LUT3D *global_lut;
 
     std::vector<ColorClazz> colors;

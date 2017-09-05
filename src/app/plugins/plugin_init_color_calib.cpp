@@ -31,7 +31,6 @@ PluginInitColorCalib::PluginInitColorCalib(FrameBuffer *_buffer,
             SLOT(slotUpdateTriggeredInitial()));
 
     global_lut = lut;
-    local_lut = new YUVLUT(8, 8, 8);
     running = false;
     nFrames = 0;
     nSamples = 0;
@@ -50,7 +49,6 @@ ColorClazz::ColorClazz(unsigned char r, unsigned char g, unsigned char b, int cl
 }
 
 void PluginInitColorCalib::slotUpdateTriggeredInitial() {
-    local_lut->reset();
     global_lut->reset();
     nFrames = 0;
     nSamples = 0;
@@ -86,7 +84,7 @@ static float ratedYuvColorDist(yuv &c1, yuv &c2, float maxColorDist, float weigh
     } else {
         // give penalty for bad angles
         angle = std::min(90.0f, angle);
-        bonus = -maxColorDist * 0.5f * angle/maxAngle;
+        bonus = -maxColorDist * 0.5f * angle / maxAngle;
     }
 
     float u = c1.u - c2.u;
@@ -94,7 +92,7 @@ static float ratedYuvColorDist(yuv &c1, yuv &c2, float maxColorDist, float weigh
     float y = c1.y - c2.y;
 
     float uvDist = u * u + v * v;
-    return ((uvDist + y * y) - bonus)*weight;
+    return ((uvDist + y * y) - bonus) * weight;
 }
 
 static yuv getColorFromImage(RawImage *img, int x, int y) {
@@ -165,20 +163,19 @@ ProcessResult PluginInitColorCalib::process(FrameData *frame,
                         CH_GREEN);
 
         int nConflicts = 0;
-        for (int y = 0; y <= 255; y += (0x1 << local_lut->X_SHIFT)) {
-            for (int u = 0; u <= 255; u += (0x1 << local_lut->Y_SHIFT)) {
-                for (int v = 0; v <= 255; v += (0x1 << local_lut->Z_SHIFT)) {
+        for (int y = 0; y <= 255; y += (0x1 << global_lut->X_SHIFT)) {
+            for (int u = 0; u <= 255; u += (0x1 << global_lut->Y_SHIFT)) {
+                for (int v = 0; v <= 255; v += (0x1 << global_lut->Z_SHIFT)) {
                     yuv color = yuv(y, u, v);
 
                     float minDiff = 1e10;
                     int clazz = 0;
                     for (int j = 0; j < colors.size(); j++) {
                         float diff = 0;
-                        if (colors[j].clazz == CH_ORANGE)
-                        {
-                           diff = ratedYuvColorDist(color, colors[j].color_yuv, maxColorDist,2.2);
+                        if (colors[j].clazz == CH_ORANGE) {
+                            diff = ratedYuvColorDist(color, colors[j].color_yuv, maxColorDist, 2.2);
                         } else {
-                           diff = ratedYuvColorDist(color, colors[j].color_yuv, maxColorDist,1.0);
+                            diff = ratedYuvColorDist(color, colors[j].color_yuv, maxColorDist, 1.0);
                         }
                         if (diff < minDiff) {
                             minDiff = diff;
@@ -192,7 +189,6 @@ ProcessResult PluginInitColorCalib::process(FrameData *frame,
                             nConflicts++;
                         }
                         global_lut->set(color.y, color.u, color.v, clazz);
-                        local_lut->set(color.y, color.u, color.v, clazz);
                     }
                 }
             }
