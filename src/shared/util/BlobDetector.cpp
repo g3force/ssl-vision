@@ -11,12 +11,11 @@
 #include <opencv2/opencv.hpp>
 
 BlobDetector::BlobDetector() {
-	// TODO Auto-generated constructor stub
-
+	//
 }
 
 BlobDetector::~BlobDetector() {
-	// TODO Auto-generated destructor stub
+	//
 }
 
 void BlobDetector::addBlob(
@@ -157,8 +156,6 @@ bool BlobDetector::detectBlob(
 		}
 	}
 
-	// find positive class
-//	std::vector<int> sum_mean(K, 0);
 	int sum_mean[K];
 	for(int i=0;i<K;i++) sum_mean[i] = 0;
 	int s=1;

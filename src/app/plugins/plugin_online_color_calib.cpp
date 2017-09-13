@@ -8,6 +8,7 @@
 
 #include "plugin_online_color_calib.h"
 #include <opencv2/opencv.hpp>
+#include <gui/automatedcolorcalibwidget.h>
 
 #define CH_ORANGE 2
 #define CH_YELLOW 3
@@ -21,11 +22,17 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(
         const CameraParameters &camera_params,
         const RoboCupField &field)
         :
-        VisionPlugin(_buffer) {
+        VisionPlugin(_buffer),
+        camera_parameters(camera_params) {
+
     QThread *thread = new QThread();
     thread->setObjectName("OnlineColorCalib");
     worker = new Worker(lut, camera_params, field);
     worker->moveToThread(thread);
+
+    global_lut = lut;
+    running = false;
+    nFrames = 0;
 
     _settings = new VarList("Online Color Calib");
 
@@ -33,6 +40,11 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(
             _updGlob = new VarTrigger("UpdateGlob", "Update Global LUT"));
     connect(_updGlob, SIGNAL(signalTriggered()), this,
             SLOT(slotUpdateTriggered()));
+
+    _settings->addChild(
+            _update = new VarTrigger("Init", "Classify initial LUT"));
+    connect(_update, SIGNAL(signalTriggered()), this,
+            SLOT(slotUpdateTriggeredInitial()));
 
     _settings->addChild(
             _resetModel = new VarTrigger("Reset", "Reset Model"));
@@ -49,11 +61,21 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(
     connect(worker, SIGNAL(finished()), worker, SLOT(deleteLater()));
     connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
     thread->start();
+
+    this->installEventFilter(this);
 }
 
 PluginOnlineColorCalib::~PluginOnlineColorCalib() {
     worker->running = false;
 }
+
+QWidget *PluginOnlineColorCalib::getControlWidget() {
+    if (_accw == 0)
+        _accw = new AutomatedColorCalibWidget();
+
+    return (QWidget *) _accw;
+}
+
 
 void PluginOnlineColorCalib::slotUpdateTriggered() {
     worker->globalLutUpdate = true;
@@ -657,8 +679,20 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
     if (frame == 0)
         return ProcessingFailed;
 
-    ColorFormat source_format = frame->video.getColorFormat();
+    if (running) {
+        ProcessResult result = initialCalibrator.handleInitialCalibration(frame, options, camera_parameters,
+                                                                          global_lut);
 
+        if (result == ProcessingOk) {
+            nFrames++;
+            if (nFrames > 5) {
+                nFrames = 0;
+                running = false;
+            }
+        }
+    }
+
+    ColorFormat source_format = frame->video.getColorFormat();
     if (_v_enable->getBool()) {
 
         if (source_format != COLOR_YUV422_UYVY) {
@@ -715,3 +749,10 @@ VarList *PluginOnlineColorCalib::getSettings() {
 string PluginOnlineColorCalib::getName() {
     return "OnlineColorCalib";
 }
+
+void PluginOnlineColorCalib::slotUpdateTriggeredInitial() {
+    global_lut->reset();
+    nFrames = 0;
+    running = true;
+}
+

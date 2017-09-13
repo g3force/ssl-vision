@@ -222,6 +222,7 @@ set (SRCS ${SRCS}
 	src/app/framedata.cpp
 	src/app/main.cpp
 
+	src/app/gui/automatedcolorcalibwidget.cpp
 	src/app/gui/cameracalibwidget.cpp
 	src/app/gui/colorpicker.cpp
 	src/app/gui/glLUTwidget.cpp
@@ -261,6 +262,7 @@ set (SRCS ${SRCS}
 qt4_wrap_cpp (MOC_SRCS
 	src/app/capture_thread.h
 
+	src/app/gui/automatedcolorcalibwidget.h
 	src/app/gui/cameracalibwidget.h
 	src/app/gui/glLUTwidget.h
 	src/app/gui/glwidget.h
@@ -277,7 +279,7 @@ qt4_wrap_cpp (MOC_SRCS
 	src/app/plugins/plugin_colorcalib.h
 	src/app/plugins/plugin_colorthreshold.h
 	src/app/plugins/plugin_online_color_calib.h
-	src/app/plugins/plugin_init_color_calib.h
+
 
 	src/app/stacks/multistack_robocup_ssl.h
 

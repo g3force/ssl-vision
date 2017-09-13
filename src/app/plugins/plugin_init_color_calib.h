@@ -23,15 +23,6 @@
 
 #include "BlobDetector.h"
 
-class ColorClazz {
-public:
-    ColorClazz(unsigned char r, unsigned char g, unsigned char b, int clazz);
-
-    rgb color_rgb;
-    yuv color_yuv;
-    int clazz;
-};
-
 class PluginInitColorCalib : public VisionPlugin {
 Q_OBJECT
 
@@ -53,32 +44,20 @@ public:
 
     virtual void mouseMoveEvent(QMouseEvent *event, pixelloc loc);
 
-protected slots:
-    void slotUpdateTriggeredInitial();
-
 private:
-    VarList *_settings;
     const CameraParameters &cam_params;
     const RoboCupField &field;
-    VarTrigger *_update;
-    bool running;
-    int nFrames;
-    long nSamples;
-    LUT3D *global_lut;
 
-    std::vector<ColorClazz> colors;
     float maxColorDist;
-
-    BlobDetector blobDetector;
 
     VarDouble *drag_x;
     VarDouble *drag_y;
 
     bool doing_drag;
 
-    void addColorToClazz(FrameData *frame, int x, int y, int clazz);
 
     bool setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y);
+
 };
 
 #endif /* SRC_APP_PLUGINS_PLUGIN_INIT_COLOR_CALIB_H_ */

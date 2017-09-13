@@ -28,7 +28,10 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <gui/automatedcolorcalibwidget.h>
+
 #include "BlobDetector.h"
+#include "initial_color_calibrator.h"
 
 class LocLabeled {
 public:
@@ -81,6 +84,7 @@ public:
     virtual void CopytoLUT(LUT3D *lut);
 
     virtual void ResetModel();
+
 
     YUVLUT local_lut;
     LUT3D *global_lut;
@@ -199,6 +203,8 @@ public:
 
     virtual ProcessResult process(FrameData *data, RenderOptions *options);
 
+    virtual QWidget *getControlWidget();
+
     virtual VarList *getSettings();
 
     virtual string getName();
@@ -209,13 +215,24 @@ protected slots:
 
     void slotResetModelTriggered();
 
+    void slotUpdateTriggeredInitial();
+
 private:
 
+    InitialColorCalibrator initialCalibrator;
+
+    LUT3D *global_lut;
+    const CameraParameters &camera_parameters;
+    bool running;
+    int nFrames;
+
+    AutomatedColorCalibWidget *_accw;
     VarList *_settings;
     VarBool *_v_enable;
     VarBool *_v_debug;
     VarTrigger *_updGlob;
     VarTrigger *_resetModel;
+    VarTrigger *_update;
     Worker *worker;
 
 };
