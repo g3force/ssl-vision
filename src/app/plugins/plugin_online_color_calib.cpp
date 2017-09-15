@@ -27,6 +27,8 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(
 
     QThread *thread = new QThread();
     thread->setObjectName("OnlineColorCalib");
+
+    _accw = nullptr;
     worker = new Worker(lut, camera_params, field);
     worker->moveToThread(thread);
 
