@@ -29,29 +29,31 @@
 class AutomatedColorCalibWidget : public QWidget {
 Q_OBJECT
 
+private:
+    QLabel *status_label;
+
 public:
-    void focusInEvent ( QFocusEvent * event );
+    void focusInEvent(QFocusEvent *event);
+
     AutomatedColorCalibWidget();
+
     ~AutomatedColorCalibWidget();
 
-    void set_slider_from_vars();
-
 protected:
-    QSlider *lineSearchCorridorWidthSlider;
-    QLabel *lineSearchCorridorWidthLabelRight;
-    QSlider *cameraHeightSlider;
-    QLabel *cameraHeightLabelRight;
-    QSlider *distortionSlider;
-    QLabel *distortionLabelRight;
 
 public slots:
+
     void is_clicked_initial();
-    void is_clicked_full();
-    void is_clicked_reset();
-    void edges_is_clicked();
-    void cameraheight_slider_changed(int val);
-    void distortion_slider_changed(int val);
-    void line_search_slider_changed(int val);
+
+    void is_clicked_start_learning();
+
+    void is_clicked_reset_model();
+
+    void is_clicked_finish_learning();
+
+    void is_clicked_update_model();
+
+    void check_box_state_changed(int state);
 };
 
 #endif

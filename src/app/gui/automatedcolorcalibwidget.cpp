@@ -23,74 +23,76 @@
 #include "automatedcolorcalibwidget.h"
 #include <QCheckBox>
 #include <QVBoxLayout>
+#include <QtGui/QGroupBox>
+#include <QtGui/QPushButton>
 
 AutomatedColorCalibWidget::AutomatedColorCalibWidget() {
-    /*
-    // The calibration points and the fit button:
-    QGroupBox *calibrationStepsBox = new QGroupBox(tr("Calibration Steps"));
+
+    QGroupBox *calibrationStepsBox = new QGroupBox(tr("Manual Color-Calibration Steps"));
+
     QPushButton *initialCalibrationButton = new QPushButton(tr("Do initial calibration"));
+    QPushButton *startLearningButton = new QPushButton(tr("Start learning"));
+    QPushButton *resteModelButton = new QPushButton(tr("Reset learned model"));
+    QPushButton *finishLearningButton = new QPushButton(tr("Finish Learning"));
+    QPushButton *updateModelButton = new QPushButton(tr("Update model"));
+
     connect(initialCalibrationButton, SIGNAL(clicked()), SLOT(is_clicked_initial()));
-    QPushButton *fullCalibrationButton = new QPushButton(tr("Do full calibration"));
-    connect(fullCalibrationButton, SIGNAL(clicked()), SLOT(is_clicked_full()));
-    QPushButton *additionalPointsButton = new QPushButton(tr("Detect additional calibration points"));
-    connect(additionalPointsButton, SIGNAL(clicked()), SLOT(edges_is_clicked()));
-    QPushButton *resetButton = new QPushButton(tr("Reset"));
-    connect(resetButton, SIGNAL(clicked()), SLOT(is_clicked_reset()));
+    connect(startLearningButton, SIGNAL(clicked()), SLOT(is_clicked_start_learning()));
+    connect(resteModelButton, SIGNAL(clicked()), SLOT(is_clicked_reset_model()));
+    connect(finishLearningButton, SIGNAL(clicked()), SLOT(is_clicked_finish_learning()));
+    connect(updateModelButton, SIGNAL(clicked()), SLOT(is_clicked_update_model()));
 
-    QGroupBox *calibrationParametersBox = new QGroupBox(tr("Calibration Parameters"));
-    // The slider for the width of the line search corridor:
-    QLabel *widthLabel = new QLabel("Line Search Corridor Width (in mm) ");
-    lineSearchCorridorWidthSlider = new QSlider(Qt::Horizontal);
-    lineSearchCorridorWidthSlider->setMinimum(50);
-    lineSearchCorridorWidthSlider->setMaximum(800);
-    lineSearchCorridorWidthLabelRight = new QLabel();
-    lineSearchCorridorWidthLabelRight->setNum(200);
-    connect(lineSearchCorridorWidthSlider, SIGNAL(valueChanged(int)), this, SLOT(line_search_slider_changed(int)));
+    auto *boxWrapper = new QVBoxLayout;
+    auto *gridLayout = new QGridLayout;
+    gridLayout->addWidget(initialCalibrationButton, 0, 0, 1, 1);
+    gridLayout->addWidget(resteModelButton, 1, 0, 1, 1);
+    gridLayout->addWidget(startLearningButton, 2, 0, 1, 1);
+    gridLayout->addWidget(finishLearningButton, 3, 0, 1, 1);
+    gridLayout->addWidget(updateModelButton, 4, 0, 1, 1);
 
-    QGroupBox *cameraParametersBox = new QGroupBox(tr("Initial Camera Parameters"));
-    // The slider for height control:
-    QLabel *heightLabel = new QLabel("Camera Height (in mm) ");
-    cameraHeightSlider = new QSlider(Qt::Horizontal);
-    cameraHeightLabelRight = new QLabel();
-    connect(cameraHeightSlider, SIGNAL(valueChanged(int)), this, SLOT(cameraheight_slider_changed(int)));
-    // Distortion slider
-    QLabel *distortionLabel = new QLabel("Distortion ");
-    distortionSlider = new QSlider(Qt::Horizontal);
-    distortionLabelRight = new QLabel();
-    distortionLabelRight->setNum(1. / 100. * (double) (distortionSlider->value()));
-    connect(distortionSlider, SIGNAL(valueChanged(int)), this, SLOT(distortion_slider_changed(int)));
+    gridLayout->addWidget(new QLabel("Do rough initial calibration: first set markers in camera calibration view"), 0, 1,
+                          1, 1);
+    gridLayout->addWidget(new QLabel("Resets the learned model data"), 1, 1, 1, 1);
+    gridLayout->addWidget(new QLabel("Start to gather model data (bots should be detectable)"), 2, 1, 1, 1);
+    gridLayout->addWidget(new QLabel("Stop gathering model data"), 3, 1, 1, 1);
+    gridLayout->addWidget(new QLabel("Update LUT using the learned model"), 4, 1, 1, 1);
 
-    // Layout for calibration control:
-    QVBoxLayout *vbox = new QVBoxLayout;
-    vbox->addWidget(initialCalibrationButton);
-    vbox->addWidget(additionalPointsButton);
-    vbox->addWidget(fullCalibrationButton);
-    vbox->addWidget(resetButton);
-    vbox->addStretch(1);
-    calibrationStepsBox->setLayout(vbox);
-    // Layout for calibration parameters
-    QGridLayout *gridCalibration = new QGridLayout;
-    gridCalibration->addWidget(widthLabel, 0, 0);
-    gridCalibration->addWidget(lineSearchCorridorWidthSlider, 0, 1);
-    gridCalibration->addWidget(lineSearchCorridorWidthLabelRight, 0, 2);
-    calibrationParametersBox->setLayout(gridCalibration);
-    // Layout for camera parameters
-    QGridLayout *gridCamera = new QGridLayout;
-    gridCamera->addWidget(heightLabel, 0, 0);
-    gridCamera->addWidget(cameraHeightSlider, 0, 1);
-    gridCamera->addWidget(cameraHeightLabelRight, 0, 2);
-    gridCamera->addWidget(distortionLabel, 1, 0);
-    gridCamera->addWidget(distortionSlider, 1, 1);
-    gridCamera->addWidget(distortionLabelRight, 1, 2);
-    cameraParametersBox->setLayout(gridCamera);
+    gridLayout->setColumnStretch(0, 1);
+    gridLayout->setColumnStretch(1, 3);
+
+    boxWrapper->addLayout(gridLayout, 1);
+    calibrationStepsBox->setLayout(boxWrapper);
+
+    QGroupBox *autoBox = new QGroupBox(tr("Automatic Color-Calibration"));
+    auto *vBoxAuto = new QVBoxLayout();
+    auto *checkBox = new QCheckBox("Activate automatic online calibration (needs rough initial calibration)");
+    connect(checkBox, SIGNAL(stateChanged(int)), SLOT(check_box_state_changed(int)));
+    QPushButton *initialCalibrationButton2 = new QPushButton(tr("Do initial calibration"));
+    connect(initialCalibrationButton2, SIGNAL(clicked()), SLOT(is_clicked_initial()));
+    vBoxAuto->addWidget(initialCalibrationButton2);
+    vBoxAuto->addWidget(checkBox);
+    vBoxAuto->addWidget(
+            new QLabel("If activated, the tool will continuously gather new model data and update the LUT"));
+    autoBox->setLayout(vBoxAuto);
+
+    status_label = new QLabel("/");
+
+    QGroupBox *statusBox = new QGroupBox(tr("Status"));
+    auto *statusGrid = new QGridLayout;
+    statusGrid->addWidget(new QLabel("Status: "),0,0,1,1);
+    statusGrid->addWidget(status_label,0,1,1,2);
+    statusGrid->setColumnStretch(1,1);
+    statusBox->setLayout(statusGrid);
 
     // Overall layout:
-    QVBoxLayout *vbox2 = new QVBoxLayout;
+    auto *vbox2 = new QVBoxLayout;
     vbox2->addWidget(calibrationStepsBox);
-    vbox2->addWidget(calibrationParametersBox);
-    vbox2->addWidget(cameraParametersBox);
+    vbox2->addStrut(5);
+    vbox2->addWidget(autoBox);
+    vbox2->addStretch(1);
+    vbox2->addWidget(statusBox);
     this->setLayout(vbox2);
-     */
+
 }
 
 AutomatedColorCalibWidget::~AutomatedColorCalibWidget() {
@@ -104,24 +106,19 @@ void AutomatedColorCalibWidget::focusInEvent(QFocusEvent *event) {
 void AutomatedColorCalibWidget::is_clicked_initial() {
 }
 
-void AutomatedColorCalibWidget::is_clicked_full() {
+void AutomatedColorCalibWidget::is_clicked_start_learning() {
 }
 
-void AutomatedColorCalibWidget::is_clicked_reset() {
+void AutomatedColorCalibWidget::is_clicked_reset_model() {
 }
 
-void AutomatedColorCalibWidget::edges_is_clicked() {
+void AutomatedColorCalibWidget::is_clicked_finish_learning() {
 }
 
-void AutomatedColorCalibWidget::set_slider_from_vars() {
+void AutomatedColorCalibWidget::is_clicked_update_model() {
+
 }
 
-void AutomatedColorCalibWidget::cameraheight_slider_changed(int val) {
-}
+void AutomatedColorCalibWidget::check_box_state_changed(int state) {
 
-void AutomatedColorCalibWidget::distortion_slider_changed(int val) {
 }
-
-void AutomatedColorCalibWidget::line_search_slider_changed(int val) {
-}
-
