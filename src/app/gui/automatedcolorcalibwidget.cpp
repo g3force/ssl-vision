@@ -160,8 +160,6 @@ bool AutomatedColorCalibWidget::is_click_update_model() {
     return tmp;
 }
 
-bool AutomatedColorCalibWidget::set_status(std::string status, std::string color) {
+bool AutomatedColorCalibWidget::set_status(std::string status) {
     status_label->setText(status.c_str());
-    std::string tmp = "QLabel { background-color : red; color : " + color + "; }";
-    status_label->setStyleSheet(tmp.c_str());
 }

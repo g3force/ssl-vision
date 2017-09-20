@@ -209,6 +209,12 @@ public:
 
     virtual string getName();
 
+    virtual void mousePressEvent(QMouseEvent *event, pixelloc loc);
+
+    virtual void mouseReleaseEvent(QMouseEvent *event, pixelloc loc);
+
+    virtual void mouseMoveEvent(QMouseEvent *event, pixelloc loc);
+
 protected slots:
 
     void slotUpdateTriggered();
@@ -234,6 +240,13 @@ private:
     VarTrigger *_resetModel;
     VarTrigger *_update;
     Worker *worker;
+
+    VarDouble *drag_x;
+    VarDouble *drag_y;
+
+    bool doing_drag;
+
+    bool setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y);
 
     void process_gui_commands();
 };

@@ -666,6 +666,7 @@ void Worker::process() {
             std::cout << "LUT updated in " << diff.count() << "s" << std::endl;
             globalLutUpdate = false;
         }
+
     }
     emit finished();
 }
@@ -757,30 +758,122 @@ void PluginOnlineColorCalib::slotUpdateTriggeredInitial() {
     initial_calib_running = true;
 }
 
-void PluginOnlineColorCalib::process_gui_commands()
-{
-    if (_accw == nullptr)
-    {
+void PluginOnlineColorCalib::process_gui_commands() {
+    if (_accw == nullptr) {
         return;
     }
-    if (_accw->is_click_initial())
-    {
+    if (_accw->is_click_initial()) {
         slotUpdateTriggeredInitial();
+        _accw->set_status("Triggered initial calibration");
     }
-    if (_accw->is_click_start_learning())
-    {
-        _v_enable = reinterpret_cast<VarBool *>(true);
+    if (_accw->is_click_start_learning()) {
+        _v_enable->setBool(true);
+        _accw->set_status("Triggered start learning");
     }
-    if (_accw->is_click_finish_learning())
-    {
-        _v_enable = reinterpret_cast<VarBool *>(false);
+    if (_accw->is_click_finish_learning()) {
+        _v_enable->setBool(false);
+        _accw->set_status("Triggered finish learning");
     }
-    if (_accw->is_click_update_model())
-    {
+    if (_accw->is_click_update_model()) {
         worker->globalLutUpdate = true;
+        worker->CopytoLUT(global_lut);
+        _accw->set_status("Model updated");
     }
-    if (_accw->is_click_reset())
-    {
+    if (_accw->is_click_reset()) {
         slotResetModelTriggered();
+        _accw->set_status("Model resetted");
     }
+    if (_accw->is_automatic_mode_active())
+    {
+        _accw->set_status("Automatic mode active!");
+        worker->_v_lifeUpdate->setBool(true);
+        _v_enable->setBool(true);
+    } else
+    {
+        if (!worker->_v_lifeUpdate->getBool())
+        {
+            _accw->set_status("Automatic mode deactivated");
+            _v_enable->setBool(false);
+        }
+        worker->_v_lifeUpdate->setBool(false);
+    }
+}
+
+void PluginOnlineColorCalib::mousePressEvent(QMouseEvent *event, pixelloc loc) {
+
+    std::vector<VarDouble *> ax;
+    std::vector<VarDouble *> ay;
+
+    ax.push_back(
+            camera_parameters.additional_calibration_information->init_yellow_x);
+    ay.push_back(
+            camera_parameters.additional_calibration_information->init_yellow_y);
+    ax.push_back(
+            camera_parameters.additional_calibration_information->init_blue_x);
+    ay.push_back(
+            camera_parameters.additional_calibration_information->init_blue_y);
+    ax.push_back(
+            camera_parameters.additional_calibration_information->init_green_x);
+    ay.push_back(
+            camera_parameters.additional_calibration_information->init_green_y);
+    ax.push_back(
+            camera_parameters.additional_calibration_information->init_pink_x);
+    ay.push_back(
+            camera_parameters.additional_calibration_information->init_pink_y);
+    ax.push_back(
+            camera_parameters.additional_calibration_information->init_orange_x);
+    ay.push_back(
+            camera_parameters.additional_calibration_information->init_orange_y);
+
+    if ((event->buttons() & Qt::LeftButton) != 0) {
+        drag_x = 0;
+        drag_y = 0;
+
+        for (int i = 0; i < ax.size(); i++) {
+            if (setDragParamsIfHit(loc,
+                                   ax[i],
+                                   ay[i])) {
+                break;
+            }
+        }
+        if (drag_x != 0 && drag_y != 0) {
+            event->accept();
+            doing_drag = true;
+        } else {
+            event->ignore();
+        }
+    } else
+        event->ignore();
+}
+
+bool PluginOnlineColorCalib::setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y) {
+    double drag_threshold = 20; //in px
+    const double x_diff =
+            x->getDouble() - loc.x;
+    const double y_diff =
+            y->getDouble() - loc.y;
+    if (sqrt(x_diff * x_diff + y_diff * y_diff) < drag_threshold) {
+        // found a point
+        drag_x = x;
+        drag_y = y;
+        return true;
+    }
+    return false;
+}
+
+void PluginOnlineColorCalib::mouseReleaseEvent(QMouseEvent *event, pixelloc loc) {
+    (void) loc;
+    doing_drag = false;
+    event->accept();
+}
+
+void PluginOnlineColorCalib::mouseMoveEvent(QMouseEvent *event, pixelloc loc) {
+    if (doing_drag && (event->buttons() & Qt::LeftButton) != 0) {
+        if (loc.x < 0) loc.x = 0;
+        if (loc.y < 0) loc.y = 0;
+        drag_x->setDouble(loc.x);
+        drag_y->setDouble(loc.y);
+        event->accept();
+    } else
+        event->ignore();
 }
