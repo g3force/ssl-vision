@@ -223,7 +223,7 @@ private:
 
     LUT3D *global_lut;
     const CameraParameters &camera_parameters;
-    bool running;
+    bool initial_calib_running;
     int nFrames;
 
     AutomatedColorCalibWidget *_accw;
@@ -235,6 +235,7 @@ private:
     VarTrigger *_update;
     Worker *worker;
 
+    void process_gui_commands();
 };
 
 #endif /* SRC_APP_PLUGINS_PLUGIN_ONLINE_COLOR_CALIB_H_ */

@@ -25,7 +25,7 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(
         VisionPlugin(_buffer),
         camera_parameters(camera_params) {
 
-    QThread *thread = new QThread();
+    auto *thread = new QThread();
     thread->setObjectName("OnlineColorCalib");
 
     _accw = nullptr;
@@ -33,7 +33,7 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(
     worker->moveToThread(thread);
 
     global_lut = lut;
-    running = false;
+    initial_calib_running = false;
     nFrames = 0;
 
     _settings = new VarList("Online Color Calib");
@@ -158,8 +158,8 @@ void Worker::ResetModel() {
     mutex_model.lock();
     local_lut.reset();
 
-    for (int i = 0; i < models.size(); i++)
-        delete models[i];
+    for (auto &model : models)
+        delete model;
     models.clear();
 
     for (int i = 0; i < cProp.size(); i++) {
@@ -371,11 +371,11 @@ BotPosStamped *Worker::findNearestBotPos(
         const BotPosStamped *exceptThisBot) {
     double minDistSq = 1e20;
     BotPosStamped *nearestBot = 0;
-    for (int i = 0; i < botPoss.size(); i++) {
-        double distSq = distanceSq(botPoss[i]->pos, loc);
-        if (distSq < minDistSq && exceptThisBot != botPoss[i]) {
+    for (auto &botPos : botPoss) {
+        double distSq = distanceSq(botPos->pos, loc);
+        if (distSq < minDistSq && exceptThisBot != botPos) {
             minDistSq = distSq;
-            nearestBot = botPoss[i];
+            nearestBot = botPos;
         }
     }
     *dist = sqrt(minDistSq);
@@ -407,8 +407,6 @@ void Worker::updateModel(
         doubleVec out = models[i]->update(v_in, v_out);
         output[i] = out[0];
     }
-
-    int col = cProp[clazz].color;
     mutex_model.unlock();
 }
 
@@ -420,34 +418,32 @@ void Worker::updateBotPositions(
     robots.insert(robots.end(), detection_frame->robots_yellow().begin(),
                   detection_frame->robots_yellow().end());
 
-    for (std::vector<SSL_DetectionRobot>::iterator robot = robots.begin();
-         robot != robots.end(); robot++) {
+    for (auto &robot : robots) {
         vector3d loc;
-        loc.x = robot->x();
-        loc.y = robot->y();
-        loc.z = robot->height();
+        loc.x = robot.x();
+        loc.y = robot.y();
+        loc.z = robot.height();
         double dist = 0;
         BotPosStamped *nearestBot = findNearestBotPos(loc, &dist);
         if (nearestBot != 0 && dist < 180) {
             nearestBot->time = detection_frame->t_capture();
             nearestBot->pos = loc;
-            nearestBot->orientation = robot->orientation();
+            nearestBot->orientation = robot.orientation();
         } else {
-            BotPosStamped *botPos = new BotPosStamped;
+            auto *botPos = new BotPosStamped;
             botPos->time = detection_frame->t_capture();
             botPos->pos = loc;
-            botPos->orientation = robot->orientation();
+            botPos->orientation = robot.orientation();
             botPoss.push_back(botPos);
         }
     }
 
     // remove old ones
-    for (std::vector<BotPosStamped *>::iterator it = botPoss.begin();
+    for (auto it = botPoss.begin();
          it != botPoss.end();) {
         BotPosStamped *botPos = *it;
         if ((detection_frame->t_capture() - botPos->time) > robot_tracking_time) {
             delete botPos;
-            botPos = 0;
             it = botPoss.erase(it);
         } else {
             it++;
@@ -542,8 +538,8 @@ void Worker::processRegions(
         const RawImage *img,
         const std::vector<CMVision::Region> &regions,
         std::vector<LocLabeled> &locs) {
-    for (int i = 0; i < regions.size(); i++) {
-        const CMVision::Region *region = &regions[i];
+    for (const auto &i : regions) {
+        const CMVision::Region *region = &i;
         int clazz = color2Clazz[region->color.v];
         vector2d pImg;
         pImg.x = region->cen_x;
@@ -605,9 +601,9 @@ void Worker::update(
     this->input->image.deepCopyFromRawImage(frame->video, true);
     this->input->regions.clear();
     int nReg = 0;
-    for (int clazz = 0; clazz < cProp.size(); clazz++) {
+    for (auto &clazz : cProp) {
         CMVision::Region *region = colorlist->getRegionList(
-                cProp[clazz].color).getInitialElement();
+                clazz.color).getInitialElement();
         while (region != 0 && nReg < max_regions) {
             this->input->regions.push_back(*region);
             region = region->next;
@@ -645,8 +641,8 @@ void Worker::process() {
         processRegions(&input->image, input->regions, locs);
         auto t2 = std::chrono::system_clock::now();
 
-        for (int i = 0; i < locs.size(); i++) {
-            updateModel(&input->image, locs[i].loc, locs[i].clazz);
+        for (auto &loc : locs) {
+            updateModel(&input->image, loc.loc, loc.clazz);
         }
 
         std::chrono::duration<double> tProc = (t2 - t1);
@@ -681,19 +677,23 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
     if (frame == 0)
         return ProcessingFailed;
 
-    if (running) {
+    // handle GUI commands here
+    process_gui_commands();
+
+    // run initial calibration
+    if (initial_calib_running) {
         ProcessResult result = initialCalibrator.handleInitialCalibration(frame, options, camera_parameters,
                                                                           global_lut);
-
         if (result == ProcessingOk) {
             nFrames++;
             if (nFrames > 5) {
                 nFrames = 0;
-                running = false;
+                initial_calib_running = false;
             }
         }
     }
 
+    // run online calibration
     ColorFormat source_format = frame->video.getColorFormat();
     if (_v_enable->getBool()) {
 
@@ -755,6 +755,17 @@ string PluginOnlineColorCalib::getName() {
 void PluginOnlineColorCalib::slotUpdateTriggeredInitial() {
     global_lut->reset();
     nFrames = 0;
-    running = true;
+    initial_calib_running = true;
 }
 
+void PluginOnlineColorCalib::process_gui_commands()
+{
+    if (_accw == nullptr)
+    {
+        return;
+    }
+    if (_accw->is_click_initial())
+    {
+        slotUpdateTriggeredInitial();
+    }
+}
