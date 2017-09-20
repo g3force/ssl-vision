@@ -50,7 +50,8 @@ AutomatedColorCalibWidget::AutomatedColorCalibWidget() {
     gridLayout->addWidget(finishLearningButton, 3, 0, 1, 1);
     gridLayout->addWidget(updateModelButton, 4, 0, 1, 1);
 
-    gridLayout->addWidget(new QLabel("Do rough initial calibration: first set markers in camera calibration view"), 0, 1,
+    gridLayout->addWidget(new QLabel("Do rough initial calibration: first set markers in camera calibration view"), 0,
+                          1,
                           1, 1);
     gridLayout->addWidget(new QLabel("Resets the learned model data"), 1, 1, 1, 1);
     gridLayout->addWidget(new QLabel("Start to gather model data (bots should be detectable)"), 2, 1, 1, 1);
@@ -74,14 +75,13 @@ AutomatedColorCalibWidget::AutomatedColorCalibWidget() {
     vBoxAuto->addWidget(
             new QLabel("If activated, the tool will continuously gather new model data and update the LUT"));
     autoBox->setLayout(vBoxAuto);
-
     status_label = new QLabel("/");
 
     QGroupBox *statusBox = new QGroupBox(tr("Status"));
     auto *statusGrid = new QGridLayout;
-    statusGrid->addWidget(new QLabel("Status: "),0,0,1,1);
-    statusGrid->addWidget(status_label,0,1,1,2);
-    statusGrid->setColumnStretch(1,1);
+    statusGrid->addWidget(new QLabel("Status: "), 0, 0, 1, 1);
+    statusGrid->addWidget(status_label, 0, 1, 1, 2);
+    statusGrid->setColumnStretch(1, 1);
     statusBox->setLayout(statusGrid);
 
     // Overall layout:
@@ -92,7 +92,6 @@ AutomatedColorCalibWidget::AutomatedColorCalibWidget() {
     vbox2->addStretch(1);
     vbox2->addWidget(statusBox);
     this->setLayout(vbox2);
-
 }
 
 AutomatedColorCalibWidget::~AutomatedColorCalibWidget() {
@@ -104,21 +103,65 @@ void AutomatedColorCalibWidget::focusInEvent(QFocusEvent *event) {
 }
 
 void AutomatedColorCalibWidget::is_clicked_initial() {
+    _is_click_initial = true;
 }
 
 void AutomatedColorCalibWidget::is_clicked_start_learning() {
+    _is_click_start_learning = true;
 }
 
 void AutomatedColorCalibWidget::is_clicked_reset_model() {
+    _is_click_reset = true;
 }
 
 void AutomatedColorCalibWidget::is_clicked_finish_learning() {
+    _is_click_finish_learning = true;
 }
 
 void AutomatedColorCalibWidget::is_clicked_update_model() {
-
+    _is_click_update_model = true;
 }
 
 void AutomatedColorCalibWidget::check_box_state_changed(int state) {
+    _is_automatic_mode_active = static_cast<bool>(state);
+}
 
+bool AutomatedColorCalibWidget::is_automatic_mode_active() {
+    return _is_automatic_mode_active;
+}
+
+bool AutomatedColorCalibWidget::is_click_initial() {
+    bool tmp = _is_click_initial;
+    _is_click_initial = false;
+    return tmp;
+}
+
+bool AutomatedColorCalibWidget::is_click_reset() {
+    bool tmp = _is_click_reset;
+    _is_click_reset = false;
+    return tmp;
+}
+
+bool AutomatedColorCalibWidget::is_click_start_learning() {
+    bool tmp = _is_click_start_learning;
+    _is_click_start_learning = false;
+    return tmp;
+}
+
+bool AutomatedColorCalibWidget::is_click_finish_learning() {
+    bool tmp = _is_click_finish_learning;
+    _is_click_finish_learning = false;
+    return tmp;
+}
+
+bool AutomatedColorCalibWidget::is_click_update_model() {
+    bool tmp = _is_click_update_model;
+    _is_click_update_model = false;
+    return tmp;
+}
+
+bool AutomatedColorCalibWidget::set_status(std::string status, std::string color) {
+    status_label->setText(status.c_str());
+    std::string tmp = "QLabel { background-color : red; color : " + color + "; }";
+    status_label->setStyleSheet(tmp.c_str());
 }
