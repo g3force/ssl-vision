@@ -657,7 +657,6 @@ void Worker::process() {
 
         if (_v_lifeUpdate->getBool()) {
             globalLutUpdate = true;
-            // maybe dont do this always... but also n-frame based
         }
 
         if (globalLutUpdate) {
@@ -767,5 +766,21 @@ void PluginOnlineColorCalib::process_gui_commands()
     if (_accw->is_click_initial())
     {
         slotUpdateTriggeredInitial();
+    }
+    if (_accw->is_click_start_learning())
+    {
+        _v_enable = reinterpret_cast<VarBool *>(true);
+    }
+    if (_accw->is_click_finish_learning())
+    {
+        _v_enable = reinterpret_cast<VarBool *>(false);
+    }
+    if (_accw->is_click_update_model())
+    {
+        worker->globalLutUpdate = true;
+    }
+    if (_accw->is_click_reset())
+    {
+        slotResetModelTriggered();
     }
 }

@@ -20,9 +20,7 @@
 //========================================================================
 #include <framedata.h>
 #include <plugins/plugin_init_color_calib.h>
-#include <plugins/visionplugin.h>
 #include "initial_color_calibrator.h"
-#include "conversions.h"
 
 #define CH_ORANGE 2
 #define CH_YELLOW 3
@@ -111,6 +109,7 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
     (void) options;
     if (frame == 0)
         return ProcessingFailed;
+
     Image<raw8> *img_debug;
     if ((img_debug = (Image<raw8> *) frame->map.get(
             "cmv_online_color_calib")) == 0) {
