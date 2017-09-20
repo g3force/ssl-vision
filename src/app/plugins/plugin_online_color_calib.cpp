@@ -107,7 +107,7 @@ Worker::Worker(
     color2Clazz[CH_ORANGE] = 0;
     cProp[0].height = 42;
     cProp[0].minDist = 200;
-    cProp[0].maxDist = 20000;
+    cProp[0].maxDist = DBL_MAX;
     cProp[0].radius = 22;
     cProp[0].nAngleRanges = 0;
 
@@ -562,11 +562,13 @@ void Worker::processRegions(
 
             if (dist < cProp[clazz].minDist
                 || !isInAngleRange(pField, clazz, botPos)) {
+
                 if (_v_removeOutlierBlobs->getBool()) {
                     addRegionCross(img, -1, region,
                                    region->width(), region->height(),
                                    -1, -1, 0, locs);
                 }
+
             } else {
                 addRegionKMeans(img, clazz, region, pWidth, pHeight, 2, locs);
             }
@@ -717,8 +719,7 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
             img_debug->fillColor(0);
 
             worker->mutex_locs.lock();
-            for (int i = 0; i < worker->locs.size(); i++) {
-                LocLabeled ll = worker->locs[i];
+            for (auto ll : worker->locs) {
                 if (ll.clazz >= 0)
                     img_debug->setPixel(ll.loc.x, ll.loc.y, worker->cProp[ll.clazz].color);
                 else
@@ -783,6 +784,7 @@ void PluginOnlineColorCalib::process_gui_commands() {
         slotResetModelTriggered();
         _accw->set_status("Model resetted");
     }
+
     if (_accw->is_automatic_mode_active())
     {
         _accw->set_status("Automatic mode active!");
@@ -790,7 +792,7 @@ void PluginOnlineColorCalib::process_gui_commands() {
         _v_enable->setBool(true);
     } else
     {
-        if (!worker->_v_lifeUpdate->getBool())
+        if (worker->_v_lifeUpdate->getBool())
         {
             _accw->set_status("Automatic mode deactivated");
             _v_enable->setBool(false);

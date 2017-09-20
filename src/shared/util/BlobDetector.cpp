@@ -41,8 +41,8 @@ void BlobDetector::findRegion(
 
 	if(classes[y+height/2][x+width/2] != posClass) return;
 
-	for(int i=0;i<result.size();i++)
-		if(result[i].x == x && result[i].y == y) return;
+	for (auto &i : result)
+		if(i.x == x && i.y == y) return;
 
 	pixelloc loc = {x,y};
 	result.push_back(loc);
@@ -248,7 +248,7 @@ void BlobDetector::update(
 			  Image<raw8> * img_debug)
 {
 	mutex.lock();
-	for(std::vector<Blob>::iterator it = blobs.begin(); it != blobs.end();)
+	for(auto it = blobs.begin(); it != blobs.end();)
 	{
 		bool ok = detectBlob(img, *it, img_debug);
 		if(!ok)
@@ -256,7 +256,7 @@ void BlobDetector::update(
 			it = blobs.erase(it);
 		} else {
 			bool del = false;
-			for(std::vector<Blob>::iterator it2 = blobs.begin(); it2 != it; it2++)
+			for(auto it2 = blobs.begin(); it2 != it; it2++)
 			{
 				if(it->center.x == it2->center.x &&
 					it->center.y == it2->center.y)
