@@ -754,7 +754,7 @@ string PluginOnlineColorCalib::getName() {
 }
 
 void PluginOnlineColorCalib::slotUpdateTriggeredInitial() {
-    global_lut->reset();
+    // global_lut->reset();
     nFrames = 0;
     initial_calib_running = true;
 }

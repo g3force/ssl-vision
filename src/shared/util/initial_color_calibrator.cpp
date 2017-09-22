@@ -160,16 +160,16 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
 
                 float minDiff = 1e10;
                 int clazz = 0;
-                for (int j = 0; j < colors.size(); j++) {
+                for (auto &j : colors) {
                     float diff = 0;
-                    if (colors[j].clazz == CH_ORANGE) {
-                        diff = ratedYuvColorDist(color, colors[j].color_yuv, maxColorDist, 2.2);
+                    if (j.clazz == CH_ORANGE) {
+                        diff = ratedYuvColorDist(color, j.color_yuv, maxColorDist, 2.2);
                     } else {
-                        diff = ratedYuvColorDist(color, colors[j].color_yuv, maxColorDist, 1.0);
+                        diff = ratedYuvColorDist(color, j.color_yuv, maxColorDist, 1.0);
                     }
                     if (diff < minDiff) {
                         minDiff = diff;
-                        clazz = colors[j].clazz;
+                        clazz = j.clazz;
                     }
                 }
 
