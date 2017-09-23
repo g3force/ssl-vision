@@ -28,13 +28,6 @@
 #define CH_PINK 5
 #define CH_GREEN 7
 
-static float rgbColorDist(rgb &c1, rgb &c2) {
-    float r = c1.r - c2.r;
-    float g = c1.g - c2.g;
-    float b = c1.b - c2.b;
-    return r * r + g * g + b * b;
-}
-
 static float ratedYuvColorDist(yuv &c1, yuv &c2, float maxColorDist, float weight) {
     float midToC1U = c1.u - 127;
     float midToC2U = c2.u - 127;
@@ -101,7 +94,7 @@ InitialColorCalibrator::~InitialColorCalibrator() {
 void InitialColorCalibrator::addColorToClazz(FrameData *frame, int x, int y, int clazz) {
     yuv initColor = getColorFromImage(&frame->video, x, y);
     rgb initColorRGB = Conversions::yuv2rgb(initColor);
-    colors.push_back(ColorClazz(initColorRGB.r, initColorRGB.g, initColorRGB.b, clazz));
+    colors.emplace_back(initColorRGB.r, initColorRGB.g, initColorRGB.b, clazz);
 }
 
 ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *frame, const RenderOptions *options,
@@ -121,7 +114,7 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
 
     SSL_DetectionFrame *detection_frame =
             (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
-    if (detection_frame == 0) {
+    if (detection_frame == nullptr) {
         printf("no detection frame\n");
         return ProcessingFailed;
     }
@@ -156,7 +149,9 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
     for (int y = 0; y <= 255; y += (0x1 << global_lut->X_SHIFT)) {
         for (int u = 0; u <= 255; u += (0x1 << global_lut->Y_SHIFT)) {
             for (int v = 0; v <= 255; v += (0x1 << global_lut->Z_SHIFT)) {
-                yuv color = yuv(y, u, v);
+                yuv color = yuv(static_cast<unsigned char>(y),
+                                static_cast<unsigned char>(u),
+                                static_cast<unsigned char>(v));
 
                 float minDiff = 1e10;
                 int clazz = 0;
@@ -178,7 +173,7 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
                     if (curClazz != 0 && curClazz != clazz) {
                         nConflicts++;
                     }
-                    global_lut->set(color.y, color.u, color.v, clazz);
+                    global_lut->set(color.y, color.u, color.v, static_cast<lut_mask_t>(clazz));
                 }
             }
         }

@@ -145,16 +145,8 @@ private:
     virtual void updateBotPositions(
             const SSL_DetectionFrame *detection_frame);
 
-    virtual void addRegionCross(
-            const RawImage *img,
-            const int targetClazz,
-            const CMVision::Region *region,
-            const int width,
-            const int height,
-            const int exclWidth,
-            const int exclHeight,
-            const int offset,
-            std::vector<LocLabeled> &locs);
+    virtual void addRegionCross(const int targetClazz, const CMVision::Region *region, const int width, const int height,
+                                    const int exclWidth, const int exclHeight, const int offset, std::vector<LocLabeled> &locs);
 
     virtual void addRegionKMeans(
             const RawImage *img,

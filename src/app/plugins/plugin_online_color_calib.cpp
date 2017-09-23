@@ -163,7 +163,7 @@ void Worker::ResetModel() {
     models.clear();
 
     for (int i = 0; i < cProp.size(); i++) {
-        LWPR_Object *model = new LWPR_Object(3, 1);
+        auto *model = new LWPR_Object(3, 1);
         doubleVec norm(3, 255);
         model->normIn(norm);
         model->setInitD(100);
@@ -193,7 +193,8 @@ void Worker::CopytoLUT(
                     output[i] = out[0];
                 }
                 int color = getColorFromModelOutput(output);
-                local_lut.set(y, u, v, color);
+                local_lut.set(static_cast<unsigned char>(y), static_cast<unsigned char>(u),
+                              static_cast<unsigned char>(v), static_cast<lut_mask_t>(color));
             }
         }
     }
@@ -203,8 +204,13 @@ void Worker::CopytoLUT(
     for (int y = 0; y <= 255; y += (0x1 << global_lut->X_SHIFT)) {
         for (int u = 0; u <= 255; u += (0x1 << global_lut->Y_SHIFT)) {
             for (int v = 0; v <= 255; v += (0x1 << global_lut->Z_SHIFT)) {
-                int color = local_lut.get(y, u, v);
-                lut->set(y, u, v, color);
+                int color = local_lut.get(static_cast<const unsigned char>(y),
+                                          static_cast<const unsigned char>(u),
+                                          static_cast<const unsigned char>(v));
+                lut->set(static_cast<unsigned char>(y),
+                         static_cast<unsigned char>(u),
+                         static_cast<unsigned char>(v),
+                         static_cast<lut_mask_t>(color));
             }
         }
     }
@@ -236,6 +242,7 @@ int Worker::getColorFromModelOutput(
     double maxValue = 0;
     for (int i = 0; i < cProp.size(); i++) {
         if (output[i] > maxValue) {
+            // maybe give confidence boni to orange here ?
             maxValue = output[i];
             maxIdx = i;
         }
@@ -274,8 +281,8 @@ void Worker::getRegionDesiredPixelDim(
     camera_parameters.field2image(pField_top, pImg_top);
     camera_parameters.field2image(pField_bottom, pImg_bottom);
 
-    width = std::abs(pImg_left.x - pImg_right.x);
-    height = std::abs(pImg_top.y - pImg_bottom.y);
+    width = static_cast<int>(std::abs(pImg_left.x - pImg_right.x));
+    height = static_cast<int>(std::abs(pImg_top.y - pImg_bottom.y));
 }
 
 void Worker::getRegionFieldDim(
@@ -451,23 +458,16 @@ void Worker::updateBotPositions(
     }
 }
 
-void Worker::addRegionCross(
-        const RawImage *img,
-        const int targetClazz,
-        const CMVision::Region *region,
-        const int width,
-        const int height,
-        const int exclWidth,
-        const int exclHeight,
-        const int offset,
-        std::vector<LocLabeled> &locs) {
+void Worker::addRegionCross(const int targetClazz, const CMVision::Region *region, const int width, const int height,
+                            const int exclWidth, const int exclHeight, const int offset,
+                            std::vector<LocLabeled> &locs) {
     for (double i = -width / 2 - offset; i <= width / 2 + offset; i++) {
         if (abs(i) < exclWidth)
             continue;
-        pixelloc loc;
-        loc.x = region->cen_x + i;
-        loc.y = region->cen_y;
-        LocLabeled ll;
+        pixelloc loc{};
+        loc.x = static_cast<int>(region->cen_x + i);
+        loc.y = static_cast<int>(region->cen_y);
+        LocLabeled ll{};
         ll.loc = loc;
         ll.clazz = targetClazz;
         locs.push_back(ll);
@@ -475,10 +475,10 @@ void Worker::addRegionCross(
     for (int i = -height / 2 - offset; i <= height / 2 + offset; i++) {
         if (abs(i) < exclHeight)
             continue;
-        pixelloc loc;
-        loc.x = region->cen_x;
-        loc.y = region->cen_y + i;
-        LocLabeled ll;
+        pixelloc loc{};
+        loc.x = static_cast<int>(region->cen_x);
+        loc.y = static_cast<int>(region->cen_y + i);
+        LocLabeled ll{};
         ll.loc = loc;
         ll.clazz = targetClazz;
         locs.push_back(ll);
@@ -494,8 +494,8 @@ void Worker::addRegionKMeans(
         const int offset,
         std::vector<LocLabeled> &locs) {
     Blob blob;
-    blob.center.x = region->cen_x;
-    blob.center.y = region->cen_y;
+    blob.center.x = static_cast<int>(region->cen_x);
+    blob.center.y = static_cast<int>(region->cen_y);
     blob.height = height + offset;
     blob.width = width + offset;
     bool ok = blobDetector.detectBlob(img, blob, 0);
@@ -510,11 +510,11 @@ void Worker::addRegionKMeans(
                 bool setPixel = false;
                 for (int i = 0; i < blob.detectedPixels.size(); i++) {
                     // update model with pixel detected inside a blob
-                    pixelloc loc;
+                    pixelloc loc{};
                     loc.x = blob.center.x + blob.detectedPixels[i].x;
                     loc.y = blob.center.y + blob.detectedPixels[i].y;
                     if (loc.x == x && loc.y == y) {
-                        LocLabeled ll;
+                        LocLabeled ll{};
                         ll.loc = loc;
                         ll.clazz = targetClazz;
                         locs.push_back(ll);
@@ -524,7 +524,7 @@ void Worker::addRegionKMeans(
                 }
                 if (!setPixel) {
                     // set pixel inside of region but not in blob -1
-                    LocLabeled ll;
+                    LocLabeled ll{};
                     ll.loc = {x, y};
                     ll.clazz = -1;
                     locs.push_back(ll);
@@ -564,17 +564,14 @@ void Worker::processRegions(
                 || !isInAngleRange(pField, clazz, botPos)) {
 
                 if (_v_removeOutlierBlobs->getBool()) {
-                    addRegionCross(img, -1, region,
-                                   region->width(), region->height(),
-                                   -1, -1, 0, locs);
+                    addRegionCross(-1, region, region->width(), region->height(), -1, -1, 0, locs);
                 }
 
             } else {
                 addRegionKMeans(img, clazz, region, pWidth, pHeight, 2, locs);
             }
         } else if (_v_removeOutlierBlobs->getBool()) {
-            addRegionCross(img, -1, region,
-                           region->width(), region->height(), -1, -1, 0, locs);
+            addRegionCross(-1, region, region->width(), region->height(), -1, -1, 0, locs);
         }
     }
 }
@@ -583,7 +580,7 @@ void Worker::update(
         FrameData *frame) {
     SSL_DetectionFrame *detection_frame =
             (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
-    if (detection_frame == 0) {
+    if (detection_frame == nullptr) {
         printf("no detection frame\n");
         return;
     }
@@ -591,7 +588,7 @@ void Worker::update(
     CMVision::ColorRegionList *colorlist;
     colorlist = (CMVision::ColorRegionList *) frame->map.get(
             "cmv_colorlist");
-    if (colorlist == 0) {
+    if (colorlist == nullptr) {
         printf(
                 "error in robot detection plugin: no region-lists were found!\n");
         return;
@@ -606,7 +603,7 @@ void Worker::update(
     for (auto &clazz : cProp) {
         CMVision::Region *region = colorlist->getRegionList(
                 clazz.color).getInitialElement();
-        while (region != 0 && nReg < max_regions) {
+        while (region != nullptr && nReg < max_regions) {
             this->input->regions.push_back(*region);
             region = region->next;
             nReg++;
@@ -662,9 +659,9 @@ void Worker::process() {
         }
 
         if (globalLutUpdate) {
-            auto t1 = std::chrono::system_clock::now();
+            auto tt1 = std::chrono::system_clock::now();
             CopytoLUT(global_lut);
-            std::chrono::duration<double> diff = std::chrono::system_clock::now() - t1;
+            std::chrono::duration<double> diff = std::chrono::system_clock::now() - tt1;
             std::cout << "LUT updated in " << diff.count() << "s" << std::endl;
             globalLutUpdate = false;
         }
@@ -676,7 +673,7 @@ void Worker::process() {
 ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
                                               RenderOptions *options) {
     (void) options;
-    if (frame == 0)
+    if (frame == nullptr)
         return ProcessingFailed;
 
     // handle GUI commands here
@@ -711,7 +708,7 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
         if (_v_debug->getBool()) {
             Image<raw8> *img_debug;
             if ((img_debug = (Image<raw8> *) frame->map.get(
-                    "cmv_online_color_calib")) == 0) {
+                    "cmv_online_color_calib")) == nullptr) {
                 img_debug = (Image<raw8> *) frame->map.insert(
                         "cmv_online_color_calib", new Image<raw8>());
             }
@@ -721,7 +718,7 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
             worker->mutex_locs.lock();
             for (auto ll : worker->locs) {
                 if (ll.clazz >= 0)
-                    img_debug->setPixel(ll.loc.x, ll.loc.y, worker->cProp[ll.clazz].color);
+                    img_debug->setPixel(ll.loc.x, ll.loc.y, static_cast<raw8>(worker->cProp[ll.clazz].color));
                 else
                     img_debug->setPixel(ll.loc.x, ll.loc.y, 1);
             }
@@ -732,7 +729,7 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
     if (source_format == COLOR_YUV422_UYVY) {
         Image<raw8> *img_thresholded;
         if ((img_thresholded = (Image<raw8> *) frame->map.get(
-                "cmv_learned_threshold")) == 0) {
+                "cmv_learned_threshold")) == nullptr) {
             img_thresholded = (Image<raw8> *) frame->map.insert(
                     "cmv_learned_threshold", new Image<raw8>());
         }
@@ -785,15 +782,12 @@ void PluginOnlineColorCalib::process_gui_commands() {
         _accw->set_status("Model resetted");
     }
 
-    if (_accw->is_automatic_mode_active())
-    {
+    if (_accw->is_automatic_mode_active()) {
         _accw->set_status("Automatic mode active!");
         worker->_v_lifeUpdate->setBool(true);
         _v_enable->setBool(true);
-    } else
-    {
-        if (worker->_v_lifeUpdate->getBool())
-        {
+    } else {
+        if (worker->_v_lifeUpdate->getBool()) {
             _accw->set_status("Automatic mode deactivated");
             _v_enable->setBool(false);
         }
@@ -828,8 +822,8 @@ void PluginOnlineColorCalib::mousePressEvent(QMouseEvent *event, pixelloc loc) {
             camera_parameters.additional_calibration_information->init_orange_y);
 
     if ((event->buttons() & Qt::LeftButton) != 0) {
-        drag_x = 0;
-        drag_y = 0;
+        drag_x = nullptr;
+        drag_y = nullptr;
 
         for (int i = 0; i < ax.size(); i++) {
             if (setDragParamsIfHit(loc,
@@ -838,7 +832,7 @@ void PluginOnlineColorCalib::mousePressEvent(QMouseEvent *event, pixelloc loc) {
                 break;
             }
         }
-        if (drag_x != 0 && drag_y != 0) {
+        if (drag_x != nullptr && drag_y != nullptr) {
             event->accept();
             doing_drag = true;
         } else {
