@@ -28,10 +28,7 @@ public:
 	BlobDetector();
 	virtual ~BlobDetector();
 
-	virtual void addBlob(
-			const Blob& blob);
-
-	virtual void findRegion(
+    virtual void findRegion(
 			const std::vector<std::vector<int>>& classes,
 			const int x,
 			const int y,

@@ -10,21 +10,9 @@
 
 #include <opencv2/opencv.hpp>
 
-BlobDetector::BlobDetector() {
-	//
-}
+BlobDetector::BlobDetector() = default;
 
-BlobDetector::~BlobDetector() {
-	//
-}
-
-void BlobDetector::addBlob(
-		const Blob& blob)
-{
-	mutex.lock();
-	blobs.push_back(blob);
-	mutex.unlock();
-}
+BlobDetector::~BlobDetector() = default;
 
 void BlobDetector::findRegion(
 		const std::vector<std::vector<int>>& classes,
@@ -33,9 +21,8 @@ void BlobDetector::findRegion(
 		const int posClass,
 			  std::vector<pixelloc>& result)
 {
-	int height = classes.size();
-	int width = classes[0].size();
-//	if (x < 0 || y < 0 || x >= width || y >= height)
+	int height = static_cast<int>(classes.size());
+	int width = static_cast<int>(classes[0].size());
 	if(abs(x) > width/2 || abs(y) > height/2)
 		return;
 
@@ -136,10 +123,10 @@ bool BlobDetector::detectBlob(
 		}
 	}
 
-	std::vector<std::vector<int>> classes(height+1);
+	std::vector<std::vector<int>> classes(static_cast<unsigned long>(height + 1));
 	int i=0;
 	for (int y = -maxY; y <= maxY; y += 1) {
-		classes[y+maxY].resize(width+1);
+		classes[y+maxY].resize(static_cast<unsigned long>(width + 1));
 		for (int x = -maxX; x <= maxX; x += 1) {
 			int rx = blob.center.x + x;
 			int ry = blob.center.y + y;
@@ -189,9 +176,9 @@ bool BlobDetector::detectBlob(
 				if(classes[y+maxY][x+maxX] == posClass)
 				{
 					numPosClass++;
-					if(img_debug != 0) img_debug->setPixel(blob.center.x+x, blob.center.y+y, 2);
+					if(img_debug != nullptr) img_debug->setPixel(blob.center.x+x, blob.center.y+y, 2);
 				} else {
-					if(img_debug != 0) img_debug->setPixel(blob.center.x+x, blob.center.y+y, 1);
+					if(img_debug != nullptr) img_debug->setPixel(blob.center.x+x, blob.center.y+y, 1);
 				}
 			}
 		}
@@ -202,12 +189,12 @@ bool BlobDetector::detectBlob(
 	blob.detectedPixels.clear();
 	findRegion(classes, 0, 0, posClass, blob.detectedPixels);
 
-	int lx=1e7, ly=1e7,hx=0,hy=0;
+	int lx= static_cast<int>(1e7), ly= static_cast<int>(1e7),hx=0,hy=0;
 	for(int i=0;i<blob.detectedPixels.size();i++)
 	{
 		int x = blob.center.x + blob.detectedPixels[i].x;
 		int y = blob.center.y + blob.detectedPixels[i].y;
-		if(img_debug != 0) img_debug->setPixel(x,y, 4);
+		if(img_debug != nullptr) img_debug->setPixel(x,y, 4);
 		sumx+=x;
 		sumy+=y;
 		lx = min(lx, x);
@@ -217,7 +204,7 @@ bool BlobDetector::detectBlob(
 	}
 
 	double circleArea = M_PI * width/2.0 * height/2.0;
-	if(blob.detectedPixels.size() <= 0 || blob.detectedPixels.size() > circleArea * 0.9)
+	if(blob.detectedPixels.empty() || blob.detectedPixels.size() > circleArea * 0.9)
 	{
 		return false;
 	}
@@ -234,11 +221,11 @@ bool BlobDetector::detectBlob(
 	if(ratio < 0.5)
 		return false;
 
-	int mu_x = round((double) sumx/blob.detectedPixels.size());
-	int mu_y = round((double) sumy/blob.detectedPixels.size());
+    auto mu_x = static_cast<int>(round((double) sumx / blob.detectedPixels.size()));
+    auto mu_y = static_cast<int>(round((double) sumy / blob.detectedPixels.size()));
 	blob.center.x = mu_x;
 	blob.center.y = mu_y;
-	if(img_debug != 0) img_debug->setPixel(blob.center.x, blob.center.y, 3);
+	if(img_debug != nullptr) img_debug->setPixel(blob.center.x, blob.center.y, 3);
 
 	return true;
 }

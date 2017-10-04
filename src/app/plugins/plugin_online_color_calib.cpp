@@ -108,7 +108,7 @@ Worker::Worker(
     cProp[0].height = 42;
     cProp[0].minDist = 200;
     cProp[0].maxDist = DBL_MAX;
-    cProp[0].radius = 22;
+    cProp[0].radius = 22; // also accept small detected blobs of orange // 22
     cProp[0].nAngleRanges = 0;
 
     cProp[1].color = CH_YELLOW;
@@ -151,8 +151,7 @@ Worker::Worker(
     running = true;
 }
 
-Worker::~Worker() {
-}
+Worker::~Worker() = default;
 
 void Worker::ResetModel() {
     mutex_model.lock();
@@ -241,9 +240,16 @@ int Worker::getColorFromModelOutput(
     int maxIdx = 0;
     double maxValue = 0;
     for (int i = 0; i < cProp.size(); i++) {
-        if (output[i] > maxValue) {
+        double val = output[i];
+
+        /*
+        if (cProp[i].color == CH_ORANGE) {
+            val = std::abs(val * 2.0);
+        }*/
+
+        if (val > maxValue) {
             // maybe give confidence boni to orange here ?
-            maxValue = output[i];
+            maxValue = val;
             maxIdx = i;
         }
     }
@@ -498,7 +504,7 @@ void Worker::addRegionKMeans(
     blob.center.y = static_cast<int>(region->cen_y);
     blob.height = height + offset;
     blob.width = width + offset;
-    bool ok = blobDetector.detectBlob(img, blob, 0);
+    bool ok = blobDetector.detectBlob(img, blob, nullptr);
     if (ok) {
         int minX = std::min(region->x1, region->x2);
         int maxX = std::max(region->x1, region->x2);
@@ -557,14 +563,12 @@ void Worker::processRegions(
                                  pHeight);
 
         if (dist < cProp[clazz].maxDist) {
-            double fWidth, fHeight;
-            getRegionFieldDim(region, clazz, fWidth, fHeight);
 
             if (dist < cProp[clazz].minDist
                 || !isInAngleRange(pField, clazz, botPos)) {
 
                 if (_v_removeOutlierBlobs->getBool()) {
-                    addRegionCross(-1, region, region->width(), region->height(), -1, -1, 0, locs);
+                   addRegionCross(-1, region, region->width(), region->height(), -1, -1, 0, locs);
                 }
 
             } else {

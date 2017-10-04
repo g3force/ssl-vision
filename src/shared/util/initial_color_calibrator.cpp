@@ -83,13 +83,11 @@ ColorClazz::ColorClazz(unsigned char r, unsigned char g, unsigned char b, int cl
 }
 
 InitialColorCalibrator::InitialColorCalibrator() {
-    // constructp
+    // construct
     maxColorDist = 3000;
 }
 
-InitialColorCalibrator::~InitialColorCalibrator() {
-    // destruct
-}
+InitialColorCalibrator::~InitialColorCalibrator() = default;
 
 void InitialColorCalibrator::addColorToClazz(FrameData *frame, int x, int y, int clazz) {
     yuv initColor = getColorFromImage(&frame->video, x, y);
@@ -100,7 +98,7 @@ void InitialColorCalibrator::addColorToClazz(FrameData *frame, int x, int y, int
 ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *frame, const RenderOptions *options,
                                                                const CameraParameters &cam_params, LUT3D *global_lut) {
     (void) options;
-    if (frame == 0)
+    if (frame == nullptr)
         return ProcessingFailed;
 
     Image<raw8> *img_debug;
@@ -152,7 +150,6 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
                 yuv color = yuv(static_cast<unsigned char>(y),
                                 static_cast<unsigned char>(u),
                                 static_cast<unsigned char>(v));
-
                 float minDiff = 1e10;
                 int clazz = 0;
                 for (auto &j : colors) {
