@@ -349,8 +349,6 @@ message (STATUS "Custom CC Flags: ${cc_flags}")
 
 add_definitions(${cc_flags})
 
-set (libs ${QT_LIBRARIES} ${EIGEN3_LIBRARIES} ${OpenCV_LIBS} dc1394 jpeg png protobuf pthread GL GLU lwpr)
-
 ## build the common code
 add_library(sslvision ${SHARED_MOC_SRCS} ${SHARED_RC_SRCS} ${CC_PROTO} ${SHARED_SRCS})
 add_dependencies(sslvision GenerateProto)
@@ -366,6 +364,7 @@ set (libs ${QT_LIBRARIES}
 	${OpenCV_LIBS}
 	${FLYCAP_LIBS}
 	${SPINNAKER_LIBS}
+        lwpr
 )
 target_link_libraries(sslvision ${libs})
 if(USE_QT5)
