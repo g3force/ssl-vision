@@ -95,8 +95,8 @@ Worker::Worker(
         cProp(5),
         color2Clazz(10, 0),
         camera_parameters(camera_params),
-        field(field),
-        local_lut(6, 6, 6) {
+        local_lut(6, 6, 6),
+        field(field) {
     global_lut = lut;
 
     _v_lifeUpdate = new VarBool("life update", false);
@@ -161,7 +161,7 @@ void Worker::ResetModel() {
         delete model;
     models.clear();
 
-    for (int i = 0; i < cProp.size(); i++) {
+    for (size_t i = 0; i < cProp.size(); i++) {
         auto *model = new LWPR_Object(3, 1);
         doubleVec norm(3, 255);
         model->normIn(norm);
@@ -187,7 +187,7 @@ void Worker::CopytoLUT(
                 input[0] = (double) y;
                 input[1] = (double) u;
                 input[2] = (double) v;
-                for (int i = 0; i < cProp.size(); i++) {
+                for (size_t i = 0; i < cProp.size(); i++) {
                     doubleVec out = models[i]->predict(input, 0.01);
                     output[i] = out[0];
                 }
@@ -237,9 +237,9 @@ static yuv getColorFromImage(
 
 int Worker::getColorFromModelOutput(
         doubleVec &output) {
-    int maxIdx = 0;
+    size_t maxIdx = 0;
     double maxValue = 0;
-    for (int i = 0; i < cProp.size(); i++) {
+    for (size_t i = 0; i < cProp.size(); i++) {
         double val = output[i];
 
         /*
@@ -398,7 +398,7 @@ BotPosStamped *Worker::findNearestBotPos(
 void Worker::updateModel(
         const RawImage *image,
         const pixelloc &loc,
-        const int clazz) {
+        const uint8_t clazz) {
     if (loc.x < 0 || loc.x >= image->getWidth()
         || loc.y < 0 || loc.y >= image->getHeight()) {
         return;
@@ -415,7 +415,7 @@ void Worker::updateModel(
     doubleVec output(models.size());
 
     doubleVec v_out(1);
-    for (int i = 0; i < models.size(); i++) {
+    for (size_t i = 0; i < models.size(); i++) {
         v_out[0] = (clazz == i);
         doubleVec out = models[i]->update(v_in, v_out);
         output[i] = out[0];
@@ -514,7 +514,7 @@ void Worker::addRegionKMeans(
         for (int x = minX; x < maxX; x++) {
             for (int y = minY; y < maxY; y++) {
                 bool setPixel = false;
-                for (int i = 0; i < blob.detectedPixels.size(); i++) {
+                for (size_t i = 0; i < blob.detectedPixels.size(); i++) {
                     // update model with pixel detected inside a blob
                     pixelloc loc{};
                     loc.x = blob.center.x + blob.detectedPixels[i].x;
@@ -829,7 +829,7 @@ void PluginOnlineColorCalib::mousePressEvent(QMouseEvent *event, pixelloc loc) {
         drag_x = nullptr;
         drag_y = nullptr;
 
-        for (int i = 0; i < ax.size(); i++) {
+        for (size_t i = 0; i < ax.size(); i++) {
             if (setDragParamsIfHit(loc,
                                    ax[i],
                                    ay[i])) {

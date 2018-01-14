@@ -86,15 +86,15 @@ public:
     virtual void ResetModel();
 
 
+    std::vector<ClazzProperties> cProp;
+    std::vector<int> color2Clazz;
+    const CameraParameters &camera_parameters;
     YUVLUT local_lut;
     LUT3D *global_lut;
-    const CameraParameters &camera_parameters;
 
     VarBool *_v_lifeUpdate;
     VarBool *_v_removeOutlierBlobs;
 
-    std::vector<ClazzProperties> cProp;
-    std::vector<int> color2Clazz;
 
     std::mutex mutex_locs;
     std::vector<LocLabeled> locs;
@@ -140,7 +140,7 @@ private:
     virtual void updateModel(
             const RawImage *image,
             const pixelloc &loc,
-            const int clazz);
+            const uint8_t clazz);
 
     virtual void updateBotPositions(
             const SSL_DetectionFrame *detection_frame);

@@ -55,7 +55,7 @@ public:
 
     bool is_click_update_model();
 
-    bool set_status(std::string status);
+    void set_status(std::string status);
 
     void focusInEvent(QFocusEvent *event);
 

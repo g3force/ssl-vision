@@ -160,6 +160,6 @@ bool AutomatedColorCalibWidget::is_click_update_model() {
     return tmp;
 }
 
-bool AutomatedColorCalibWidget::set_status(std::string status) {
+void AutomatedColorCalibWidget::set_status(std::string status) {
     status_label->setText(status.c_str());
 }
