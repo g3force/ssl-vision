@@ -20,11 +20,9 @@
 //========================================================================
 #include <framedata.h>
 #include <plugins/visionplugin.h>
-#include <messages_robocup_ssl_detection.pb.h>
 #include "conversions.h"
 #include "camera_calibration.h"
 #include "lut3d.h"
-#include "image.h"
 #include "initial_color_calibrator.h"
 
 #define CH_ORANGE 2
@@ -82,22 +80,20 @@ static yuv getColorFromImage(RawImage *img, int x, int y) {
 }
 
 ColorClazz::ColorClazz(unsigned char r, unsigned char g, unsigned char b, int clazz)
-        : color_rgb(r, g, b) {
-    this->clazz = clazz;
+        : color_rgb(r, g, b), clazz(clazz) {
     color_yuv = Conversions::rgb2yuv(color_rgb);
 }
 
-InitialColorCalibrator::InitialColorCalibrator() {
-    // construct
-    maxColorDist = 3000;
+InitialColorCalibrator::InitialColorCalibrator()
+        : maxColorDist(3000) {
 }
 
 InitialColorCalibrator::~InitialColorCalibrator() = default;
 
-void InitialColorCalibrator::addColorToClazz(FrameData *frame, int x, int y, int clazz) {
+void InitialColorCalibrator::addColorToClazz(FrameData *frame, int x, int y, int clazz, std::vector<ColorClazz> *colors) {
     yuv initColor = getColorFromImage(&frame->video, x, y);
     rgb initColorRGB = Conversions::yuv2rgb(initColor);
-    colors.emplace_back(initColorRGB.r, initColorRGB.g, initColorRGB.b, clazz);
+    colors->emplace_back(initColorRGB.r, initColorRGB.g, initColorRGB.b, clazz);
 }
 
 ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *frame, const RenderOptions *options,
@@ -106,49 +102,37 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
     if (frame == nullptr)
         return ProcessingFailed;
 
-    Image<raw8> *img_debug;
-    if ((img_debug = (Image<raw8> *) frame->map.get(
-            "cmv_online_color_calib")) == 0) {
-        img_debug = (Image<raw8> *) frame->map.insert(
-                "cmv_online_color_calib", new Image<raw8>());
-    }
-    img_debug->allocate(frame->video.getWidth(), frame->video.getHeight());
-    img_debug->fillColor(0);
-
-    SSL_DetectionFrame *detection_frame =
-            (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
-    if (detection_frame == nullptr) {
-        printf("no detection frame\n");
-        return ProcessingFailed;
-    }
-
-    colors.clear();
+    std::vector<ColorClazz> colors;
     addColorToClazz((FrameData *) frame,
                     cam_params.additional_calibration_information->init_yellow_x->getInt(),
                     cam_params.additional_calibration_information->init_yellow_y->getInt(),
-                    CH_YELLOW);
+                    CH_YELLOW,
+                    &colors);
 
     addColorToClazz((FrameData *) frame,
                     cam_params.additional_calibration_information->init_blue_x->getInt(),
                     cam_params.additional_calibration_information->init_blue_y->getInt(),
-                    CH_BLUE);
+                    CH_BLUE,
+                    &colors);
 
     addColorToClazz((FrameData *) frame,
                     cam_params.additional_calibration_information->init_pink_x->getInt(),
                     cam_params.additional_calibration_information->init_pink_y->getInt(),
-                    CH_PINK);
+                    CH_PINK,
+                    &colors);
 
     addColorToClazz((FrameData *) frame,
                     cam_params.additional_calibration_information->init_orange_x->getInt(),
                     cam_params.additional_calibration_information->init_orange_y->getInt(),
-                    CH_ORANGE);
+                    CH_ORANGE,
+                    &colors);
 
     addColorToClazz((FrameData *) frame,
                     cam_params.additional_calibration_information->init_green_x->getInt(),
                     cam_params.additional_calibration_information->init_green_y->getInt(),
-                    CH_GREEN);
+                    CH_GREEN,
+                    &colors);
 
-    int nConflicts = 0;
     for (int y = 0; y <= 255; y += (0x1 << global_lut->X_SHIFT)) {
         for (int u = 0; u <= 255; u += (0x1 << global_lut->Y_SHIFT)) {
             for (int v = 0; v <= 255; v += (0x1 << global_lut->Z_SHIFT)) {
@@ -171,17 +155,12 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
                 }
 
                 if (minDiff < maxColorDist) {
-                    int curClazz = global_lut->get(color.y, color.u, color.v);
-                    if (curClazz != 0 && curClazz != clazz) {
-                        nConflicts++;
-                    }
                     global_lut->set(color.y, color.u, color.v, static_cast<lut_mask_t>(clazz));
                 }
             }
         }
     }
 
-    return
-            ProcessingOk;
+    return ProcessingOk;
 }
 

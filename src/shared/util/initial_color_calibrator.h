@@ -34,14 +34,12 @@ public:
 class InitialColorCalibrator {
 
 private:
-    virtual void addColorToClazz(FrameData *frame, int x, int y, int clazz);
+    virtual void addColorToClazz(FrameData *frame, int x, int y, int clazz, std::vector<ColorClazz> *colors);
 
-    std::vector<ColorClazz> colors;
     float maxColorDist;
 
 public:
     InitialColorCalibrator();
-
     virtual ~InitialColorCalibrator();
 
     virtual ProcessResult handleInitialCalibration(const FrameData *frame, const RenderOptions *options,
