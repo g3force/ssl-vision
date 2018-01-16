@@ -19,7 +19,12 @@
 */
 //========================================================================
 #include <framedata.h>
-#include <plugins/plugin_init_color_calib.h>
+#include <plugins/visionplugin.h>
+#include <messages_robocup_ssl_detection.pb.h>
+#include "conversions.h"
+#include "camera_calibration.h"
+#include "lut3d.h"
+#include "image.h"
 #include "initial_color_calibrator.h"
 
 #define CH_ORANGE 2
