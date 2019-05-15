@@ -30,7 +30,7 @@
 
 #include <gui/automatedcolorcalibwidget.h>
 
-#include "BlobDetector.h"
+#include "blob_detector.h"
 #include "initial_color_calibrator.h"
 
 class LocLabeled {

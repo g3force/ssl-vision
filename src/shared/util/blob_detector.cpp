@@ -6,7 +6,7 @@
  *      Mark Geiger <markgeiger@posteo.de>
  */
 
-#include "BlobDetector.h"
+#include "blob_detector.h"
 
 #include <opencv2/opencv.hpp>
 
