@@ -156,9 +156,11 @@ Worker::~Worker() = default;
 void Worker::ResetModel() {
   mutex_model.lock();
   local_lut.reset();
+  local_lut.updateDerivedLUTs();
 
-  for (auto &model : models)
+  for (auto &model : models) {
     delete model;
+  }
   models.clear();
 
   for (size_t i = 0; i < cProp.size(); i++) {
@@ -178,10 +180,11 @@ void Worker::CopyToLUT(LUT3D *lut) {
   doubleVec in(3);
   doubleVec output(cProp.size());
 
+  // update local LUT by quering the model. This can take a bit longer, so rather not lock the non-local LUT for too long
   mutex_model.lock();
-  for (int y = 0; y <= 255; y += (0x1u << global_lut->X_SHIFT)) {
-    for (int u = 0; u <= 255; u += (0x1u << global_lut->Y_SHIFT)) {
-      for (int v = 0; v <= 255; v += (0x1u << global_lut->Z_SHIFT)) {
+  for (int y = 0; y <= 255; y += (0x1u << lut->X_SHIFT)) {
+    for (int u = 0; u <= 255; u += (0x1u << lut->Y_SHIFT)) {
+      for (int v = 0; v <= 255; v += (0x1u << lut->Z_SHIFT)) {
         in[0] = (double) y;
         in[1] = (double) u;
         in[2] = (double) v;
@@ -196,11 +199,13 @@ void Worker::CopyToLUT(LUT3D *lut) {
     }
   }
   mutex_model.unlock();
+  local_lut.updateDerivedLUTs();
 
+  // update the non-local LUT with the values from the local one
   lut->lock();
-  for (int y = 0; y <= 255; y += (0x1u << global_lut->X_SHIFT)) {
-    for (int u = 0; u <= 255; u += (0x1u << global_lut->Y_SHIFT)) {
-      for (int v = 0; v <= 255; v += (0x1u << global_lut->Z_SHIFT)) {
+  for (int y = 0; y <= 255; y += (0x1u << lut->X_SHIFT)) {
+    for (int u = 0; u <= 255; u += (0x1u << lut->Y_SHIFT)) {
+      for (int v = 0; v <= 255; v += (0x1u << lut->Z_SHIFT)) {
         int color = local_lut.get(static_cast<const unsigned char>(y),
                                   static_cast<const unsigned char>(u),
                                   static_cast<const unsigned char>(v));
@@ -212,24 +217,7 @@ void Worker::CopyToLUT(LUT3D *lut) {
     }
   }
   lut->unlock();
-}
-
-static yuv getColorFromImage(
-        const RawImage *img,
-        const int x,
-        const int y) {
-  yuv color;
-  uyvy color2 = *((uyvy *) (img->getData()
-                            + (sizeof(uyvy)
-                               * (((y * (img->getWidth())) + x) / 2))));
-  color.u = color2.u;
-  color.v = color2.v;
-  if ((x % 2) == 0) {
-    color.y = color2.y1;
-  } else {
-    color.y = color2.y2;
-  }
-  return color;
+  lut->updateDerivedLUTs();
 }
 
 int Worker::getColorFromModelOutput(
@@ -245,8 +233,9 @@ int Worker::getColorFromModelOutput(
       maxIdx = i;
     }
   }
-  if (maxValue > 0.5)
+  if (maxValue > 0.5) {
     return cProp[maxIdx].color;
+  }
   return 0;
 }
 
@@ -296,8 +285,9 @@ static double norm(vector2d vec) {
 }
 
 static double getAngle(vector2d vec) {
-  if (vec.x == 0 && vec.y == 0)
+  if (vec.x == 0 && vec.y == 0) {
     return 0;
+  }
   double tmp = acos(vec.x / norm(vec));
   if (vec.y > 0) {
     return tmp;
@@ -363,7 +353,7 @@ void Worker::updateModel(
     return;
   }
 
-  yuv color = getColorFromImage(image, loc.x, loc.y);
+  yuv color = image->getYuv(loc.x, loc.y);
 
   doubleVec v_in(3);
   v_in[0] = color.y;
@@ -382,8 +372,7 @@ void Worker::updateModel(
   mutex_model.unlock();
 }
 
-void Worker::updateBotPositions(
-        const SSL_DetectionFrame *detection_frame) {
+void Worker::updateBotPositions(const SSL_DetectionFrame *detection_frame) {
   std::vector<SSL_DetectionRobot> robots;
   robots.insert(robots.end(), detection_frame->robots_blue().begin(),
                 detection_frame->robots_blue().end());
@@ -411,8 +400,7 @@ void Worker::updateBotPositions(
   }
 
   // remove old ones
-  for (auto it = botPoss.begin();
-       it != botPoss.end();) {
+  for (auto it = botPoss.begin(); it != botPoss.end();) {
     BotPosStamped *botPos = *it;
     if ((detection_frame->t_capture() - botPos->time) > robot_tracking_time) {
       delete botPos;
@@ -423,12 +411,18 @@ void Worker::updateBotPositions(
   }
 }
 
-void Worker::addRegionCross(const int targetClazz, const CMVision::Region *region, const int width, const int height,
-                            const int exclWidth, const int exclHeight, const int offset,
-                            std::vector<LocLabeled> &locations) {
+static void addRegionCross(const int targetClazz,
+                           const CMVision::Region *region,
+                           const int width,
+                           const int height,
+                           const int exclWidth,
+                           const int exclHeight,
+                           const int offset,
+                           std::vector<LocLabeled> &locations) {
   for (int i = -width / 2 - offset; i <= width / 2 + offset; i++) {
-    if (abs(i) < exclWidth)
+    if (abs(i) < exclWidth) {
       continue;
+    }
     pixelloc loc{};
     loc.x = static_cast<int>(region->cen_x + i);
     loc.y = static_cast<int>(region->cen_y);
@@ -438,8 +432,9 @@ void Worker::addRegionCross(const int targetClazz, const CMVision::Region *regio
     locations.push_back(ll);
   }
   for (int i = -height / 2 - offset; i <= height / 2 + offset; i++) {
-    if (abs(i) < exclHeight)
+    if (abs(i) < exclHeight) {
       continue;
+    }
     pixelloc loc{};
     loc.x = static_cast<int>(region->cen_x);
     loc.y = static_cast<int>(region->cen_y + i);
@@ -520,14 +515,10 @@ void Worker::processRegions(
     getRegionDesiredPixelDim(region, clazz, pWidth, pHeight);
 
     if (dist < cProp[clazz].maxDist) {
-
-      if (dist < cProp[clazz].minDist
-          || !isInAngleRange(pField, clazz, botPos)) {
-
+      if (dist < cProp[clazz].minDist || !isInAngleRange(pField, clazz, botPos)) {
         if (_v_removeOutlierBlobs->getBool()) {
           addRegionCross(-1, region, region->width(), region->height(), -1, -1, 0, locations);
         }
-
       } else {
         addRegionKMeans(img, clazz, region, pWidth, pHeight, 2, locations);
       }
@@ -537,21 +528,17 @@ void Worker::processRegions(
   }
 }
 
-void Worker::update(
-        FrameData *frame) {
-  SSL_DetectionFrame *detection_frame =
-          (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
+void Worker::update(FrameData *frame) {
+  SSL_DetectionFrame *detection_frame = (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
   if (detection_frame == nullptr) {
     printf("no detection frame\n");
     return;
   }
 
   CMVision::ColorRegionList *colorlist;
-  colorlist = (CMVision::ColorRegionList *) frame->map.get(
-          "cmv_colorlist");
+  colorlist = (CMVision::ColorRegionList *) frame->map.get("cmv_colorlist");
   if (colorlist == nullptr) {
-    printf(
-            "error in robot detection plugin: no region-lists were found!\n");
+    printf("error in robot detection plugin: no region-lists were found!\n");
     return;
   }
 
@@ -562,8 +549,7 @@ void Worker::update(
   this->input->regions.clear();
   int nReg = 0;
   for (auto &clazz : cProp) {
-    CMVision::Region *region = colorlist->getRegionList(
-            clazz.color).getInitialElement();
+    CMVision::Region *region = colorlist->getRegionList(clazz.color).getInitialElement();
     while (region != nullptr && nReg < max_regions) {
       this->input->regions.push_back(*region);
       region = region->next;
@@ -657,7 +643,7 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
   ColorFormat source_format = frame->video.getColorFormat();
   if (_v_enable->getBool()) {
 
-    if (source_format != COLOR_YUV422_UYVY) {
+    if (source_format != COLOR_YUV422_UYVY && source_format != COLOR_RGB8) {
       std::cerr << "Unsupported source format: " << source_format
                 << std::endl;
       _v_enable->setBool(false);
@@ -704,7 +690,6 @@ string PluginOnlineColorCalib::getName() {
 }
 
 void PluginOnlineColorCalib::slotUpdateTriggeredInitial() {
-  // global_lut->reset();
   nFrames = 0;
   initial_calib_running = true;
 }
@@ -753,35 +738,23 @@ void PluginOnlineColorCalib::mousePressEvent(QMouseEvent *event, pixelloc loc) {
   std::vector<VarDouble *> ax;
   std::vector<VarDouble *> ay;
 
-  ax.push_back(
-          camera_parameters.additional_calibration_information->init_yellow_x);
-  ay.push_back(
-          camera_parameters.additional_calibration_information->init_yellow_y);
-  ax.push_back(
-          camera_parameters.additional_calibration_information->init_blue_x);
-  ay.push_back(
-          camera_parameters.additional_calibration_information->init_blue_y);
-  ax.push_back(
-          camera_parameters.additional_calibration_information->init_green_x);
-  ay.push_back(
-          camera_parameters.additional_calibration_information->init_green_y);
-  ax.push_back(
-          camera_parameters.additional_calibration_information->init_pink_x);
-  ay.push_back(
-          camera_parameters.additional_calibration_information->init_pink_y);
-  ax.push_back(
-          camera_parameters.additional_calibration_information->init_orange_x);
-  ay.push_back(
-          camera_parameters.additional_calibration_information->init_orange_y);
+  ax.push_back(camera_parameters.additional_calibration_information->init_yellow_x);
+  ay.push_back(camera_parameters.additional_calibration_information->init_yellow_y);
+  ax.push_back(camera_parameters.additional_calibration_information->init_blue_x);
+  ay.push_back(camera_parameters.additional_calibration_information->init_blue_y);
+  ax.push_back(camera_parameters.additional_calibration_information->init_green_x);
+  ay.push_back(camera_parameters.additional_calibration_information->init_green_y);
+  ax.push_back(camera_parameters.additional_calibration_information->init_pink_x);
+  ay.push_back(camera_parameters.additional_calibration_information->init_pink_y);
+  ax.push_back(camera_parameters.additional_calibration_information->init_orange_x);
+  ay.push_back(camera_parameters.additional_calibration_information->init_orange_y);
 
   if ((event->buttons() & Qt::LeftButton) != 0) {
     drag_x = nullptr;
     drag_y = nullptr;
 
     for (size_t i = 0; i < ax.size(); i++) {
-      if (setDragParamsIfHit(loc,
-                             ax[i],
-                             ay[i])) {
+      if (setDragParamsIfHit(loc, ax[i], ay[i])) {
         break;
       }
     }
@@ -797,10 +770,8 @@ void PluginOnlineColorCalib::mousePressEvent(QMouseEvent *event, pixelloc loc) {
 
 bool PluginOnlineColorCalib::setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y) {
   double drag_threshold = 20; //in px
-  const double x_diff =
-          x->getDouble() - loc.x;
-  const double y_diff =
-          y->getDouble() - loc.y;
+  const double x_diff = x->getDouble() - loc.x;
+  const double y_diff = y->getDouble() - loc.y;
   if (sqrt(x_diff * x_diff + y_diff * y_diff) < drag_threshold) {
     // found a point
     drag_x = x;

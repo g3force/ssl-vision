@@ -24,9 +24,8 @@
 
 class ColorClazz {
 public:
-    ColorClazz(unsigned char r, unsigned char g, unsigned char b, int clazz);
+    ColorClazz(const yuv &initColor, int clazz);
 
-    rgb color_rgb;
     yuv color_yuv;
     int clazz;
 };

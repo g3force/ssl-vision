@@ -65,24 +65,8 @@ static float ratedYuvColorDist(yuv &c1, yuv &c2, float maxColorDist, float weigh
   return ((uvDist + y * y) - bonus) * weight;
 }
 
-static yuv getColorFromImage(RawImage *img, int x, int y) {
-  yuv color;
-  uyvy color2 = *((uyvy *) (img->getData()
-                            + (sizeof(uyvy)
-                               * (((y * (img->getWidth())) + x) / 2))));
-  color.u = color2.u;
-  color.v = color2.v;
-  if ((x % 2) == 0) {
-    color.y = color2.y1;
-  } else {
-    color.y = color2.y2;
-  }
-  return color;
-}
-
-ColorClazz::ColorClazz(unsigned char r, unsigned char g, unsigned char b, int clazz)
-        : color_rgb(r, g, b), clazz(clazz) {
-  color_yuv = Conversions::rgb2yuv(color_rgb);
+ColorClazz::ColorClazz(const yuv &initColor, int clazz)
+        : color_yuv(initColor), clazz(clazz) {
 }
 
 void InitialColorCalibrator::addColorToClazz(FrameData *frame,
@@ -90,20 +74,16 @@ void InitialColorCalibrator::addColorToClazz(FrameData *frame,
                                              int y,
                                              int clazz,
                                              std::vector<ColorClazz> *colors) {
-  rgb initColorRGB;
+  yuv initColor;
   ColorFormat colorFormat = frame->video.getColorFormat();
   if (colorFormat == COLOR_YUV422_UYVY) {
-    yuv initColor = getColorFromImage(&frame->video, x, y);
-    initColorRGB = Conversions::yuv2rgb(initColor);
+    initColor = frame->video.getYuv(x, y);
   } else if (colorFormat == COLOR_RGB8) {
-    rgbImage rgb_img(frame->video);
-    rgb *color_rgb = rgb_img.getPixelData();
-    color_rgb += y * frame->video.getWidth() + x;
-    initColorRGB = *color_rgb;
+    initColor = Conversions::rgb2yuv(frame->video.getRgb(x, y));
   } else {
     std::cerr << "Unsupported source format: " << frame->video.getColorFormat() << std::endl;
   }
-  colors->emplace_back(initColorRGB.r, initColorRGB.g, initColorRGB.b, clazz);
+  colors->push_back(ColorClazz(initColor, clazz));
 }
 
 ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *frame, const RenderOptions *options,

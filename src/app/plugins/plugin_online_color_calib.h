@@ -139,10 +139,6 @@ private:
     void updateBotPositions(
             const SSL_DetectionFrame *detection_frame);
 
-    void
-    addRegionCross(int targetClazz, const CMVision::Region *region, int width, int height,
-                   int exclWidth, int exclHeight, int offset, std::vector<LocLabeled> &locations);
-
     void addRegionKMeans(
             const RawImage *img,
             int targetClazz,
