@@ -16,37 +16,35 @@
 
 class Blob {
 public:
-	pixelloc center;
-	int width;
-	int height;
-	int channel;
-	std::vector<pixelloc> detectedPixels;
+    pixelloc center;
+    int width;
+    int height;
+    std::vector<pixelloc> detectedPixels;
 };
 
 class BlobDetector {
 public:
-	BlobDetector();
-	virtual ~BlobDetector();
+    BlobDetector();
 
-    virtual void findRegion(
-			const std::vector<std::vector<int>>& classes,
-			const int x,
-			const int y,
-			const int posClass,
-				  std::vector<pixelloc>& result);
+    virtual ~BlobDetector();
 
-	virtual bool detectBlob(
-			const RawImage * img,
-				  Blob& blob,
-				  Image<raw8> * img_debug);
+    void findRegion(
+            const std::vector<std::vector<int>> &classes,
+            int x,
+            int y,
+            int posClass,
+            std::vector<pixelloc> &result);
 
-	virtual void update(
-			const RawImage* img,
-				  Image<raw8> * img_debug = 0);
+    bool detectBlob(
+            const RawImage *img,
+            Blob &blob,
+            Image<raw8> *img_debug);
 
-	std::vector<Blob> blobs;
+    void update(const RawImage *img, Image<raw8> *img_debug = nullptr);
+
+    std::vector<Blob> blobs;
 private:
-	std::mutex mutex;
+    std::mutex mutex;
 };
 
 #endif /* SRC_SHARED_UTIL_BLOBDETECTOR_H_ */

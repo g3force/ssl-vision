@@ -77,11 +77,11 @@ Q_OBJECT
 public:
     Worker(LUT3D *lut, const CameraParameters &camera_params, const RoboCupField &field);
 
-    virtual ~Worker();
+    ~Worker() override;
 
     virtual void update(FrameData *frame);
 
-    virtual void CopytoLUT(LUT3D *lut);
+    virtual void CopyToLUT(LUT3D *lut);
 
     virtual void ResetModel();
 
@@ -112,55 +112,50 @@ signals:
     void error(QString err);
 
 private:
-    virtual int getColorFromModelOutput(
+    int getColorFromModelOutput(
             doubleVec &output);
 
-    virtual void getRegionDesiredPixelDim(
+    void getRegionDesiredPixelDim(
             const CMVision::Region *region,
-            const int clazz,
+            int clazz,
             int &width,
             int &height);
 
-    virtual void getRegionFieldDim(
-            const CMVision::Region *region,
-            const int clazz,
-            double &width,
-            double &height);
-
-    virtual bool isInAngleRange(
+    bool isInAngleRange(
             const vector3d &pField,
-            const int clazz,
+            int clazz,
             const BotPosStamped *botPos);
 
-    virtual BotPosStamped *findNearestBotPos(
+    BotPosStamped *findNearestBotPos(
             const vector3d &loc,
             double *dist,
-            const BotPosStamped *exceptThisBot = 0);
+            const BotPosStamped *exceptThisBot);
 
-    virtual void updateModel(
+    void updateModel(
             const RawImage *image,
             const pixelloc &loc,
-            const uint8_t clazz);
+            uint8_t clazz);
 
-    virtual void updateBotPositions(
+    void updateBotPositions(
             const SSL_DetectionFrame *detection_frame);
 
-    virtual void addRegionCross(const int targetClazz, const CMVision::Region *region, const int width, const int height,
-                                    const int exclWidth, const int exclHeight, const int offset, std::vector<LocLabeled> &locs);
+    void
+    addRegionCross(int targetClazz, const CMVision::Region *region, int width, int height,
+                   int exclWidth, int exclHeight, int offset, std::vector<LocLabeled> &locations);
 
-    virtual void addRegionKMeans(
+    void addRegionKMeans(
             const RawImage *img,
-            const int targetClazz,
+            int targetClazz,
             const CMVision::Region *region,
-            const int width,
-            const int height,
-            const int offset,
-            std::vector<LocLabeled> &locs);
+            int width,
+            int height,
+            int offset,
+            std::vector<LocLabeled> &locations);
 
-    virtual void processRegions(
+    void processRegions(
             const RawImage *img,
             const std::vector<CMVision::Region> &regions,
-            std::vector<LocLabeled> &locs);
+            std::vector<LocLabeled> &locations);
 
     // synchronization
     std::mutex mutex_sync;
@@ -188,24 +183,26 @@ class PluginOnlineColorCalib : public VisionPlugin {
 Q_OBJECT
 
 public:
-    PluginOnlineColorCalib(FrameBuffer *_buffer, LUT3D *lut,
-                           const CameraParameters &camera_params, const RoboCupField &field);
+    PluginOnlineColorCalib(FrameBuffer *_buffer,
+                           LUT3D *lut,
+                           const CameraParameters &camera_params,
+                           const RoboCupField &field);
 
-    virtual ~PluginOnlineColorCalib();
+    ~PluginOnlineColorCalib() override;
 
-    virtual ProcessResult process(FrameData *data, RenderOptions *options);
+    ProcessResult process(FrameData *data, RenderOptions *options) override;
 
-    virtual QWidget *getControlWidget();
+    QWidget *getControlWidget() override;
 
-    virtual VarList *getSettings();
+    VarList *getSettings() override;
 
-    virtual string getName();
+    string getName() override;
 
-    virtual void mousePressEvent(QMouseEvent *event, pixelloc loc);
+    void mousePressEvent(QMouseEvent *event, pixelloc loc) override;
 
-    virtual void mouseReleaseEvent(QMouseEvent *event, pixelloc loc);
+    void mouseReleaseEvent(QMouseEvent *event, pixelloc loc) override;
 
-    virtual void mouseMoveEvent(QMouseEvent *event, pixelloc loc);
+    void mouseMoveEvent(QMouseEvent *event, pixelloc loc) override;
 
 protected slots:
 
@@ -233,10 +230,10 @@ private:
     VarTrigger *_update;
     Worker *worker;
 
-    VarDouble *drag_x;
-    VarDouble *drag_y;
+    VarDouble *drag_x = nullptr;
+    VarDouble *drag_y = nullptr;
 
-    bool doing_drag;
+    bool doing_drag = false;
 
     bool setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y);
 

@@ -34,16 +34,23 @@ public:
 class InitialColorCalibrator {
 
 private:
-    virtual void addColorToClazz(FrameData *frame, int x, int y, int clazz, std::vector<ColorClazz> *colors);
+    virtual void addColorToClazz(FrameData *frame,
+                                 int x,
+                                 int y,
+                                 int clazz,
+                                 std::vector<ColorClazz> *colors);
 
-    float maxColorDist;
+    float maxColorDist = 3000;
 
 public:
-    InitialColorCalibrator();
-    virtual ~InitialColorCalibrator();
+    InitialColorCalibrator() = default;
 
-    virtual ProcessResult handleInitialCalibration(const FrameData *frame, const RenderOptions *options,
-                                                   const CameraParameters &cam_params, LUT3D *global_lut);
+    ~InitialColorCalibrator() = default;
+
+    ProcessResult handleInitialCalibration(const FrameData *frame,
+                                           const RenderOptions *options,
+                                           const CameraParameters &cam_params,
+                                           LUT3D *global_lut);
 
 };
 

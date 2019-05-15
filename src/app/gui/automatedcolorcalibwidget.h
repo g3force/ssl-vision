@@ -60,6 +60,7 @@ public:
     void focusInEvent(QFocusEvent *event) override;
 
 public slots:
+
     void is_clicked_initial();
 
     void is_clicked_start_learning();
