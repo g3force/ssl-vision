@@ -157,7 +157,6 @@ protected:
   void editRedo(); //performs a redo
   void editStore(); //records a state for undoing (will also clear the redo stack)
   void editClearAll(); //clears both the redo and undo buffer
-  void refresh();
 protected:
 
   LUTChannelMode _mode;
