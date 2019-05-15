@@ -21,6 +21,7 @@
 #include <framedata.h>
 #include <plugins/visionplugin.h>
 #include "conversions.h"
+#include "image.h"
 #include "camera_calibration.h"
 #include "lut3d.h"
 #include "initial_color_calibrator.h"
@@ -91,9 +92,20 @@ InitialColorCalibrator::InitialColorCalibrator()
 InitialColorCalibrator::~InitialColorCalibrator() = default;
 
 void InitialColorCalibrator::addColorToClazz(FrameData *frame, int x, int y, int clazz, std::vector<ColorClazz> *colors) {
+  rgb initColorRGB;
+  ColorFormat colorFormat = frame->video.getColorFormat();
+  if(colorFormat == COLOR_YUV422_UYVY) {
     yuv initColor = getColorFromImage(&frame->video, x, y);
-    rgb initColorRGB = Conversions::yuv2rgb(initColor);
-    colors->emplace_back(initColorRGB.r, initColorRGB.g, initColorRGB.b, clazz);
+    initColorRGB = Conversions::yuv2rgb(initColor);
+  } else if(colorFormat == COLOR_RGB8) {
+    rgbImage rgb_img(frame->video);
+    rgb * color_rgb=rgb_img.getPixelData();
+    color_rgb += y * frame->video.getWidth() + x;
+    initColorRGB = *color_rgb;
+  } else {
+    std::cerr << "Unsupported source format: " << frame->video.getColorFormat() << std::endl;
+  }
+  colors->emplace_back(initColorRGB.r, initColorRGB.g, initColorRGB.b, clazz);
 }
 
 ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *frame, const RenderOptions *options,
@@ -160,6 +172,7 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
             }
         }
     }
+    global_lut->updateDerivedLUTs();
 
     return ProcessingOk;
 }
