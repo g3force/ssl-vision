@@ -95,7 +95,7 @@ Worker::Worker(
         cProp(5),
         color2Clazz(10, 0),
         camera_parameters(camera_params),
-        local_lut(6, 6, 6),
+        local_lut(4, 6, 6),
         field(field) {
     global_lut = lut;
 
