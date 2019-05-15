@@ -711,10 +711,8 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
 
         if (_v_debug->getBool()) {
             Image<raw8> *img_debug;
-            if ((img_debug = (Image<raw8> *) frame->map.get(
-                    "cmv_online_color_calib")) == nullptr) {
-                img_debug = (Image<raw8> *) frame->map.insert(
-                        "cmv_online_color_calib", new Image<raw8>());
+            if ((img_debug = (Image<raw8> *) frame->map.get("cmv_online_color_calib")) == nullptr) {
+                img_debug = (Image<raw8> *) frame->map.insert("cmv_online_color_calib", new Image<raw8>());
             }
             img_debug->allocate(frame->video.getWidth(), frame->video.getHeight());
             img_debug->fillColor(0);
@@ -728,19 +726,13 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
             }
             worker->mutex_locs.unlock();
         }
-    }
 
-    if (source_format == COLOR_YUV422_UYVY) {
         Image<raw8> *img_thresholded;
-        if ((img_thresholded = (Image<raw8> *) frame->map.get(
-                "cmv_learned_threshold")) == nullptr) {
-            img_thresholded = (Image<raw8> *) frame->map.insert(
-                    "cmv_learned_threshold", new Image<raw8>());
+        if ((img_thresholded = (Image<raw8> *) frame->map.get("cmv_learned_threshold")) == nullptr) {
+          img_thresholded = (Image<raw8> *) frame->map.insert("cmv_learned_threshold", new Image<raw8>());
         }
-        img_thresholded->allocate(frame->video.getWidth(),
-                                  frame->video.getHeight());
-        CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded,
-                                                     &(frame->video), &worker->local_lut);
+        img_thresholded->allocate(frame->video.getWidth(), frame->video.getHeight());
+        CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded, &(frame->video), &worker->local_lut);
     }
 
     return ProcessingOk;

@@ -31,17 +31,17 @@ Q_OBJECT
 
 private:
     QLabel *status_label;
-    bool _is_automatic_mode_active;
-    bool _is_click_initial;
-    bool _is_click_reset;
-    bool _is_click_start_learning;
-    bool _is_click_finish_learning;
-    bool _is_click_update_model;
+    bool _is_automatic_mode_active{};
+    bool _is_click_initial{};
+    bool _is_click_reset{};
+    bool _is_click_start_learning{};
+    bool _is_click_finish_learning{};
+    bool _is_click_update_model{};
 
 public:
     AutomatedColorCalibWidget();
 
-    ~AutomatedColorCalibWidget();
+    ~AutomatedColorCalibWidget() override = default;
 
     bool is_automatic_mode_active();
 
@@ -55,9 +55,9 @@ public:
 
     bool is_click_update_model();
 
-    void set_status(std::string status);
+    void set_status(const std::string &status);
 
-    void focusInEvent(QFocusEvent *event);
+    void focusInEvent(QFocusEvent *event) override;
 
 public slots:
     void is_clicked_initial();

@@ -50,9 +50,8 @@ AutomatedColorCalibWidget::AutomatedColorCalibWidget() {
     gridLayout->addWidget(finishLearningButton, 3, 0, 1, 1);
     gridLayout->addWidget(updateModelButton, 4, 0, 1, 1);
 
-    gridLayout->addWidget(new QLabel("Do rough initial calibration: first set markers in camera calibration view"), 0,
-                          1,
-                          1, 1);
+    gridLayout->addWidget(new QLabel("Do rough initial calibration: first set markers in camera calibration view"),
+            0, 1, 1, 1);
     gridLayout->addWidget(new QLabel("Resets the learned model data"), 1, 1, 1, 1);
     gridLayout->addWidget(new QLabel("Start to gather model data (bots should be detectable)"), 2, 1, 1, 1);
     gridLayout->addWidget(new QLabel("Stop gathering model data"), 3, 1, 1, 1);
@@ -92,10 +91,6 @@ AutomatedColorCalibWidget::AutomatedColorCalibWidget() {
     vbox2->addStretch(1);
     vbox2->addWidget(statusBox);
     this->setLayout(vbox2);
-}
-
-AutomatedColorCalibWidget::~AutomatedColorCalibWidget() {
-    // Destroy GUI here
 }
 
 void AutomatedColorCalibWidget::focusInEvent(QFocusEvent *event) {
@@ -160,6 +155,6 @@ bool AutomatedColorCalibWidget::is_click_update_model() {
     return tmp;
 }
 
-void AutomatedColorCalibWidget::set_status(std::string status) {
+void AutomatedColorCalibWidget::set_status(const std::string &status) {
     status_label->setText(status.c_str());
 }
