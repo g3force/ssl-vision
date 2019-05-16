@@ -26,7 +26,7 @@
 
 PluginAutoColorCalibration::PluginAutoColorCalibration(
         FrameBuffer *_buffer,
-        LUT3D *lut,
+        YUVLUT *lut,
         const CameraParameters &camera_params,
         const RoboCupField &field)
         :
@@ -69,13 +69,10 @@ ProcessResult PluginAutoColorCalibration::process(FrameData *frame, RenderOption
 
   // run initial calibration
   if (initial_calibration_running) {
-    ProcessResult result = initialColorCalibrator.handleInitialCalibration(frame, options, camera_parameters,
-                                                                      global_lut);
-    if (result == ProcessingOk) {
-      processed_frames++;
-      if (processed_frames > 5) {
-        initial_calibration_running = false;
-      }
+    initialColorCalibrator.process(frame, camera_parameters, global_lut);
+    processed_frames++;
+    if (processed_frames > 5) {
+      initial_calibration_running = false;
     }
   }
 

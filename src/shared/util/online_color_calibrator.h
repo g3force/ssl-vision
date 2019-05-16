@@ -78,13 +78,13 @@ class OnlineColorCalibrator : public QObject {
 Q_OBJECT
 
 public:
-    OnlineColorCalibrator(LUT3D *lut, const CameraParameters &camera_params, const RoboCupField &field);
+    OnlineColorCalibrator(YUVLUT *lut, const CameraParameters &camera_params, const RoboCupField &field);
 
     ~OnlineColorCalibrator() override;
 
     void update(FrameData *frame);
 
-    void CopyToLUT(LUT3D *lut);
+    void CopyToLUT(YUVLUT *lut);
 
     void ResetModel();
 
@@ -93,7 +93,7 @@ public:
     std::vector<int> color2Clazz;
     const CameraParameters &camera_parameters;
     YUVLUT local_lut;
-    LUT3D *global_lut;
+    YUVLUT *global_lut;
 
     VarList *_settings;
     VarBool *_v_removeOutlierBlobs;
@@ -116,6 +116,8 @@ signals:
     void error(QString err);
 
 private:
+    void updateLocalLUT();
+
     int getColorFromModelOutput(
             doubleVec &output);
 

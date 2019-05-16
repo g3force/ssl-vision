@@ -80,10 +80,9 @@ public:
 
     ~InitialColorCalibrator() = default;
 
-    ProcessResult handleInitialCalibration(const FrameData *frame,
-                                           const RenderOptions *options,
-                                           const CameraParameters &cam_params,
-                                           LUT3D *global_lut);
+    void process(const FrameData *frame,
+                 const CameraParameters &cam_params,
+                 YUVLUT *global_lut);
 
 };
 

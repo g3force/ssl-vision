@@ -22,14 +22,14 @@
 #include "online_color_calibrator.h"
 
 OnlineColorCalibrator::OnlineColorCalibrator(
-        LUT3D *lut,
+        YUVLUT *lut,
         const CameraParameters &camera_params,
         const RoboCupField &field)
         :
         cProp(5),
         color2Clazz(10, 0),
         camera_parameters(camera_params),
-        local_lut(4, 6, 6),
+        local_lut(lut->getSizeX(), lut->getSizeY(), lut->getSizeZ()),
         global_lut(lut),
         field(field) {
 
@@ -120,32 +120,7 @@ void OnlineColorCalibrator::ResetModel() {
   mutex_model.unlock();
 }
 
-void OnlineColorCalibrator::CopyToLUT(LUT3D *lut) {
-  doubleVec in(3);
-  doubleVec output(cProp.size());
-
-  // update local LUT by quering the model. This can take a bit longer, so rather not lock the non-local LUT for too long
-  mutex_model.lock();
-  for (int y = 0; y <= 255; y += (0x1u << lut->X_SHIFT)) {
-    for (int u = 0; u <= 255; u += (0x1u << lut->Y_SHIFT)) {
-      for (int v = 0; v <= 255; v += (0x1u << lut->Z_SHIFT)) {
-        in[0] = (double) y;
-        in[1] = (double) u;
-        in[2] = (double) v;
-        for (size_t i = 0; i < cProp.size(); i++) {
-          doubleVec out = models[i]->predict(in, 0.01);
-          output[i] = out[0];
-        }
-        int color = getColorFromModelOutput(output);
-        local_lut.set(static_cast<unsigned char>(y), static_cast<unsigned char>(u),
-                      static_cast<unsigned char>(v), static_cast<lut_mask_t>(color));
-      }
-    }
-  }
-  mutex_model.unlock();
-  local_lut.updateDerivedLUTs();
-
-  // update the non-local LUT with the values from the local one
+void OnlineColorCalibrator::CopyToLUT(YUVLUT *lut) {
   lut->lock();
   for (int y = 0; y <= 255; y += (0x1u << lut->X_SHIFT)) {
     for (int u = 0; u <= 255; u += (0x1u << lut->Y_SHIFT)) {
@@ -162,6 +137,32 @@ void OnlineColorCalibrator::CopyToLUT(LUT3D *lut) {
   }
   lut->unlock();
   lut->updateDerivedLUTs();
+}
+
+void OnlineColorCalibrator::updateLocalLUT() {
+  doubleVec in(3);
+  doubleVec output(cProp.size());
+
+  // update local LUT by quering the model. This can take a bit longer, so rather not lock the non-local LUT for too long
+  mutex_model.lock();
+  for (int y = 0; y <= 255; y += (0x1u << local_lut.X_SHIFT)) {
+    for (int u = 0; u <= 255; u += (0x1u << local_lut.Y_SHIFT)) {
+      for (int v = 0; v <= 255; v += (0x1u << local_lut.Z_SHIFT)) {
+        in[0] = (double) y;
+        in[1] = (double) u;
+        in[2] = (double) v;
+        for (size_t i = 0; i < cProp.size(); i++) {
+          doubleVec out = models[i]->predict(in, 0.01);
+          output[i] = out[0];
+        }
+        int color = getColorFromModelOutput(output);
+        local_lut.set(static_cast<unsigned char>(y), static_cast<unsigned char>(u),
+                      static_cast<unsigned char>(v), static_cast<lut_mask_t>(color));
+      }
+    }
+  }
+  mutex_model.unlock();
+  local_lut.updateDerivedLUTs();
 }
 
 int OnlineColorCalibrator::getColorFromModelOutput(
@@ -305,13 +306,11 @@ void OnlineColorCalibrator::updateModel(
   v_in[2] = color.v;
 
   mutex_model.lock();
-  doubleVec output(models.size());
 
   doubleVec v_out(1);
   for (size_t i = 0; i < models.size(); i++) {
     v_out[0] = (clazz == i);
-    doubleVec out = models[i]->update(v_in, v_out);
-    output[i] = out[0];
+    models[i]->update(v_in, v_out);
   }
   mutex_model.unlock();
 }
@@ -527,18 +526,29 @@ void OnlineColorCalibrator::process() {
 
     std::vector<LocLabeled> locations;
     auto t1 = std::chrono::system_clock::now();
+
     processRegions(&workerInput->image, workerInput->regions, locations);
+
     auto t2 = std::chrono::system_clock::now();
 
     for (auto &loc : locations) {
       updateModel(&workerInput->image, loc.loc, loc.clazz);
     }
 
+    auto t3 = std::chrono::system_clock::now();
+
+    updateLocalLUT();
+
+    auto t4 = std::chrono::system_clock::now();
+
     std::chrono::duration<double> tProc = (t2 - t1);
-    std::cout << "Proc time: " <<
-              tProc.count() <<
-              " new locs: " << locations.size() <<
-              std::endl;
+    std::chrono::duration<double> tUpdate = (t3 - t2);
+    std::chrono::duration<double> tPredict = (t4 - t3);
+    std::cout <<
+              "processing: " << tProc.count() << std::endl <<
+              "update:     " << tUpdate.count() << std::endl <<
+              "predict:    " << tPredict.count() << std::endl <<
+              "new locs:   " << locations.size() << std::endl << std::endl;
 
     mutex_locs.lock();
     this->locs = locations;

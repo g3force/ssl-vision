@@ -55,9 +55,9 @@ Q_OBJECT
 
 public:
     PluginAutoColorCalibration(FrameBuffer *_buffer,
-                           LUT3D *lut,
-                           const CameraParameters &camera_params,
-                           const RoboCupField &field);
+                               YUVLUT *lut,
+                               const CameraParameters &camera_params,
+                               const RoboCupField &field);
 
     ~PluginAutoColorCalibration() override;
 
@@ -79,7 +79,7 @@ private:
 
     InitialColorCalibrator initialColorCalibrator;
 
-    LUT3D *global_lut;
+    YUVLUT *global_lut;
     const CameraParameters &camera_parameters;
     bool initial_calibration_running = false;
     int processed_frames = 0;

@@ -48,12 +48,9 @@ void InitialColorCalibrator::addColorToClazz(FrameData *frame,
   colors->push_back(ColorClazz(initColor, clazz));
 }
 
-ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *frame, const RenderOptions *options,
-                                                               const CameraParameters &cam_params, LUT3D *global_lut) {
-  (void) options;
-  if (frame == nullptr)
-    return ProcessingFailed;
-
+void InitialColorCalibrator::process(const FrameData *frame,
+                                     const CameraParameters &cam_params,
+                                     YUVLUT *global_lut) {
   std::vector<ColorClazz> colors;
   addColorToClazz((FrameData *) frame,
                   cam_params.additional_calibration_information->init_yellow_x->getInt(),
@@ -113,7 +110,5 @@ ProcessResult InitialColorCalibrator::handleInitialCalibration(const FrameData *
     }
   }
   global_lut->updateDerivedLUTs();
-
-  return ProcessingOk;
 }
 
