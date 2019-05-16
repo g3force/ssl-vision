@@ -77,11 +77,11 @@ public:
 
 private:
 
-    InitialColorCalibrator initialCalibrator;
+    InitialColorCalibrator initialColorCalibrator;
 
     LUT3D *global_lut;
     const CameraParameters &camera_parameters;
-    bool initial_calib_running = false;
+    bool initial_calibration_running = false;
     int processed_frames = 0;
 
     AutomatedColorCalibWidget *_accw = nullptr;
@@ -93,7 +93,7 @@ private:
     VarDouble *drag_y = nullptr;
 
     bool doing_drag = false;
-    bool enabled = false;
+    bool online_calibration_running = false;
 
     bool setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y);
 

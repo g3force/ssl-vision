@@ -68,25 +68,24 @@ ProcessResult PluginAutoColorCalibration::process(FrameData *frame, RenderOption
   process_gui_commands();
 
   // run initial calibration
-  if (initial_calib_running) {
-    ProcessResult result = initialCalibrator.handleInitialCalibration(frame, options, camera_parameters,
+  if (initial_calibration_running) {
+    ProcessResult result = initialColorCalibrator.handleInitialCalibration(frame, options, camera_parameters,
                                                                       global_lut);
     if (result == ProcessingOk) {
       processed_frames++;
       if (processed_frames > 5) {
-        processed_frames = 0;
-        initial_calib_running = false;
+        initial_calibration_running = false;
       }
     }
   }
 
   // run online calibration
   ColorFormat source_format = frame->video.getColorFormat();
-  if (enabled) {
+  if (online_calibration_running) {
 
     if (source_format != COLOR_YUV422_UYVY && source_format != COLOR_RGB8) {
       std::cerr << "Unsupported source format: " << source_format << std::endl;
-      enabled = false;
+      online_calibration_running = false;
       _accw->set_status("Unsupported source format");
       return ProcessingFailed;
     }
@@ -147,15 +146,15 @@ void PluginAutoColorCalibration::process_gui_commands() {
   }
   if (_accw->is_click_initial()) {
     processed_frames = 0;
-    initial_calib_running = true;
+    initial_calibration_running = true;
     _accw->set_status("Triggered initial calibration");
   }
   if (_accw->is_click_start_learning()) {
-    enabled = true;
+    online_calibration_running = true;
     _accw->set_status("Triggered start learning");
   }
   if (_accw->is_click_finish_learning()) {
-    enabled = false;
+    online_calibration_running = false;
     _accw->set_status("Triggered finish learning");
   }
   if (_accw->is_click_update_model()) {
@@ -171,11 +170,11 @@ void PluginAutoColorCalibration::process_gui_commands() {
   if (_accw->is_automatic_mode_active()) {
     _accw->set_status("Automatic mode active");
     onlineColorCalibrator->liveUpdate = true;
-    enabled = true;
+    online_calibration_running = true;
   } else {
     if (onlineColorCalibrator->liveUpdate) {
       _accw->set_status("Automatic mode deactivated");
-      enabled = false;
+      online_calibration_running = false;
     }
     onlineColorCalibrator->liveUpdate = false;
   }
