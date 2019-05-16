@@ -92,15 +92,15 @@ public:
     YUVLUT local_lut;
     LUT3D *global_lut;
 
-    VarBool *_v_lifeUpdate;
     VarBool *_v_removeOutlierBlobs;
 
 
     std::mutex mutex_locs;
     std::vector<LocLabeled> locs;
 
-    bool globalLutUpdate;
-    bool running;
+    bool globalLutUpdate = false;
+    bool running = true;
+    bool liveUpdate = false;
 public slots:
 
     void process();
@@ -169,7 +169,7 @@ private:
 
     std::vector<LWPR_Object *> models;
     float robot_tracking_time;
-    int max_regions;
+    int max_regions = 1000;
     std::vector<BotPosStamped *> botPoss;
 
     BlobDetector blobDetector;
@@ -200,36 +200,25 @@ public:
 
     void mouseMoveEvent(QMouseEvent *event, pixelloc loc) override;
 
-protected slots:
-
-    void slotUpdateTriggered();
-
-    void slotResetModelTriggered();
-
-    void slotUpdateTriggeredInitial();
-
 private:
 
     InitialColorCalibrator initialCalibrator;
 
     LUT3D *global_lut;
     const CameraParameters &camera_parameters;
-    bool initial_calib_running;
-    int nFrames;
+    bool initial_calib_running = false;
+    int nFrames = 0;
 
-    AutomatedColorCalibWidget *_accw;
+    AutomatedColorCalibWidget *_accw = nullptr;
     VarList *_settings;
-    VarBool *_v_enable;
     VarBool *_v_debug;
-    VarTrigger *_updGlob;
-    VarTrigger *_resetModel;
-    VarTrigger *_update;
     Worker *worker;
 
     VarDouble *drag_x = nullptr;
     VarDouble *drag_y = nullptr;
 
     bool doing_drag = false;
+    bool enabled = false;
 
     bool setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y);
 

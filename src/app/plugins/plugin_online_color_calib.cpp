@@ -23,39 +23,16 @@ PluginOnlineColorCalib::PluginOnlineColorCalib(
         const RoboCupField &field)
         :
         VisionPlugin(_buffer),
+        global_lut(lut),
         camera_parameters(camera_params) {
 
   auto *thread = new QThread();
   thread->setObjectName("OnlineColorCalib");
-
-  _accw = nullptr;
   worker = new Worker(lut, camera_params, field);
   worker->moveToThread(thread);
 
-  global_lut = lut;
-  initial_calib_running = false;
-  nFrames = 0;
-
   _settings = new VarList("Online Color Calib");
-
-  _settings->addChild(
-          _updGlob = new VarTrigger("UpdateGlob", "Update Global LUT"));
-  connect(_updGlob, SIGNAL(signalTriggered()), this,
-          SLOT(slotUpdateTriggered()));
-
-  _settings->addChild(
-          _update = new VarTrigger("Init", "Classify initial LUT"));
-  connect(_update, SIGNAL(signalTriggered()), this,
-          SLOT(slotUpdateTriggeredInitial()));
-
-  _settings->addChild(
-          _resetModel = new VarTrigger("Reset", "Reset Model"));
-  connect(_resetModel, SIGNAL(signalTriggered()), this,
-          SLOT(slotResetModelTriggered()));
-
-  _settings->addChild(_v_enable = new VarBool("enabled", false));
   _settings->addChild(_v_debug = new VarBool("debug", false));
-  _settings->addChild(worker->_v_lifeUpdate);
   _settings->addChild(worker->_v_removeOutlierBlobs);
 
   connect(thread, SIGNAL(started()), worker, SLOT(process()));
@@ -78,15 +55,6 @@ QWidget *PluginOnlineColorCalib::getControlWidget() {
   return (QWidget *) _accw;
 }
 
-
-void PluginOnlineColorCalib::slotUpdateTriggered() {
-  worker->globalLutUpdate = true;
-}
-
-void PluginOnlineColorCalib::slotResetModelTriggered() {
-  worker->ResetModel();
-}
-
 Worker::Worker(
         LUT3D *lut,
         const CameraParameters &camera_params,
@@ -96,12 +64,12 @@ Worker::Worker(
         color2Clazz(10, 0),
         camera_parameters(camera_params),
         local_lut(4, 6, 6),
+        global_lut(lut),
         field(field) {
-  global_lut = lut;
 
-  _v_lifeUpdate = new VarBool("life update", false);
-  _v_removeOutlierBlobs = new VarBool("remove outlier blobs", false);
+  local_lut.addDerivedLUT(new RGBLUT(5, 5, 5, ""));
 
+  _v_removeOutlierBlobs = new VarBool("remove outlier blobs", true);
 
   cProp[0].color = CH_ORANGE;
   color2Clazz[CH_ORANGE] = 0;
@@ -142,13 +110,10 @@ Worker::Worker(
   ResetModel();
 
   robot_tracking_time = 10;
-  max_regions = 200;
   input = inputData;
   inputIdx = 0;
   inputData[0].number = -1;
   inputData[1].number = -1;
-  globalLutUpdate = false;
-  running = true;
 }
 
 Worker::~Worker() = default;
@@ -505,8 +470,7 @@ void Worker::processRegions(
     pImg.x = region->cen_x;
     pImg.y = region->cen_y;
     vector3d pField;
-    camera_parameters.image2field(pField, pImg,
-                                  cProp[clazz].height);
+    camera_parameters.image2field(pField, pImg, cProp[clazz].height);
 
     double dist;
     BotPosStamped *botPos = findNearestBotPos(pField, &dist);
@@ -557,7 +521,7 @@ void Worker::update(FrameData *frame) {
     }
   }
   if (nReg == max_regions) {
-    std::cout << "Too many regions." << std::endl;
+    std::cout << "Too many regions: " << nReg << std::endl;
   }
   mutex_input.unlock();
 
@@ -601,7 +565,7 @@ void Worker::process() {
     this->locs = locations;
     mutex_locs.unlock();
 
-    if (_v_lifeUpdate->getBool()) {
+    if (liveUpdate) {
       globalLutUpdate = true;
     }
 
@@ -641,12 +605,12 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
 
   // run online calibration
   ColorFormat source_format = frame->video.getColorFormat();
-  if (_v_enable->getBool()) {
+  if (enabled) {
 
     if (source_format != COLOR_YUV422_UYVY && source_format != COLOR_RGB8) {
-      std::cerr << "Unsupported source format: " << source_format
-                << std::endl;
-      _v_enable->setBool(false);
+      std::cerr << "Unsupported source format: " << source_format << std::endl;
+      enabled = false;
+      _accw->set_status("Unsupported source format");
       return ProcessingFailed;
     }
 
@@ -675,7 +639,18 @@ ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
       img_thresholded = (Image<raw8> *) frame->map.insert("cmv_learned_threshold", new Image<raw8>());
     }
     img_thresholded->allocate(frame->video.getWidth(), frame->video.getHeight());
-    CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded, &(frame->video), &worker->local_lut);
+    if (frame->video.getColorFormat() == COLOR_RGB8) {
+      auto *rgblut = (RGBLUT *) worker->local_lut.getDerivedLUT(CSPACE_RGB);
+      if (rgblut == nullptr) {
+        std::cerr << "WARNING: No RGB LUT has been defined." << std::endl;
+      } else {
+        CMVisionThreshold::thresholdImageRGB(img_thresholded, &(frame->video), rgblut);
+      }
+    } else if (frame->video.getColorFormat() == COLOR_YUV422_UYVY) {
+      CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded, &(frame->video), &worker->local_lut);
+    } else {
+      std::cerr << "Unsupported source format for learned threshold: " << source_format << std::endl;
+    }
   }
 
   return ProcessingOk;
@@ -689,25 +664,21 @@ string PluginOnlineColorCalib::getName() {
   return "OnlineColorCalib";
 }
 
-void PluginOnlineColorCalib::slotUpdateTriggeredInitial() {
-  nFrames = 0;
-  initial_calib_running = true;
-}
-
 void PluginOnlineColorCalib::process_gui_commands() {
   if (_accw == nullptr) {
     return;
   }
   if (_accw->is_click_initial()) {
-    slotUpdateTriggeredInitial();
+    nFrames = 0;
+    initial_calib_running = true;
     _accw->set_status("Triggered initial calibration");
   }
   if (_accw->is_click_start_learning()) {
-    _v_enable->setBool(true);
+    enabled = true;
     _accw->set_status("Triggered start learning");
   }
   if (_accw->is_click_finish_learning()) {
-    _v_enable->setBool(false);
+    enabled = false;
     _accw->set_status("Triggered finish learning");
   }
   if (_accw->is_click_update_model()) {
@@ -716,20 +687,20 @@ void PluginOnlineColorCalib::process_gui_commands() {
     _accw->set_status("Model updated");
   }
   if (_accw->is_click_reset()) {
-    slotResetModelTriggered();
-    _accw->set_status("Model resetted");
+    worker->ResetModel();
+    _accw->set_status("Model reset");
   }
 
   if (_accw->is_automatic_mode_active()) {
-    _accw->set_status("Automatic mode active!");
-    worker->_v_lifeUpdate->setBool(true);
-    _v_enable->setBool(true);
+    _accw->set_status("Automatic mode active");
+    worker->liveUpdate = true;
+    enabled = true;
   } else {
-    if (worker->_v_lifeUpdate->getBool()) {
+    if (worker->liveUpdate) {
       _accw->set_status("Automatic mode deactivated");
-      _v_enable->setBool(false);
+      enabled = false;
     }
-    worker->_v_lifeUpdate->setBool(false);
+    worker->liveUpdate = false;
   }
 }
 
