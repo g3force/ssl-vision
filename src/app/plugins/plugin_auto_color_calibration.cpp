@@ -37,8 +37,8 @@ PluginAutoColorCalibration::PluginAutoColorCalibration(
   onlineColorCalibrator = new OnlineColorCalibrator(lut, camera_params, field);
 
   _settings = new VarList("Auto Color Calibration");
+  _settings->addChild(onlineColorCalibrator->_settings);
   _settings->addChild(_v_debug = new VarBool("debug", false));
-  _settings->addChild(onlineColorCalibrator->_v_removeOutlierBlobs);
 
   // get mouse events
   this->installEventFilter(this);

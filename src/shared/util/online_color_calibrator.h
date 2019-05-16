@@ -95,6 +95,7 @@ public:
     YUVLUT local_lut;
     LUT3D *global_lut;
 
+    VarList *_settings;
     VarBool *_v_removeOutlierBlobs;
 
 

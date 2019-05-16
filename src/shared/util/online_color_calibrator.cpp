@@ -35,7 +35,6 @@ OnlineColorCalibrator::OnlineColorCalibrator(
 
   local_lut.addDerivedLUT(new RGBLUT(5, 5, 5, ""));
 
-  _v_removeOutlierBlobs = new VarBool("remove outlier blobs", true);
 
   cProp[0].color = CH_ORANGE;
   color2Clazz[CH_ORANGE] = 0;
@@ -81,6 +80,8 @@ OnlineColorCalibrator::OnlineColorCalibrator(
   inputData[0].number = -1;
   inputData[1].number = -1;
 
+  _settings = new VarList("Auto Color Calibration");
+  _settings->addChild(_v_removeOutlierBlobs = new VarBool("remove outlier blobs", true));
 
   auto *thread = new QThread();
   thread->setObjectName("OnlineColorCalibrator");
