@@ -758,8 +758,6 @@ CameraParameters::AdditionalCalibrationInformation::
   cov_ls_y = new VarDouble("Cov line segment measurement y", 1.0);
   pointSeparation = new VarDouble("Points separation", 150);
 
-  blueMarker_x = new VarDouble("blue marker", 10);
-
   init_orange_x = new VarDouble("orange_color_x",10);
   init_orange_y = new VarDouble("orange_color_y",10);
 
@@ -862,7 +860,6 @@ CameraParameters::AdditionalCalibrationInformation::~AdditionalCalibrationInform
   delete cov_ls_x;
   delete cov_ls_y;
   delete pointSeparation;
-  delete blueMarker_x;
   delete init_yellow_y;
   delete init_yellow_x;
   delete init_blue_y;
@@ -893,15 +890,4 @@ void CameraParameters::AdditionalCalibrationInformation::addSettingsToList(
   list.addChild(cov_ls_x);
   list.addChild(cov_ls_y);
   list.addChild(pointSeparation);
-
-    list.addChild(init_yellow_x);
-    list.addChild(init_yellow_y);
-    list.addChild(init_blue_x);
-    list.addChild(init_blue_y);
-    list.addChild(init_pink_x);
-    list.addChild(init_pink_y);
-    list.addChild(init_orange_x);
-    list.addChild(init_orange_y);
-    list.addChild(init_green_x);
-    list.addChild(init_green_y);
 }

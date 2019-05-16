@@ -140,8 +140,6 @@ public:
       VarDouble* control_point_field_xs[kNumControlPoints];
       VarDouble* control_point_field_ys[kNumControlPoints];
 
-      VarDouble* blueMarker_x;
-
       VarDouble* initial_distortion;
       VarDouble* camera_height;
       VarDouble* line_search_corridor_width;
