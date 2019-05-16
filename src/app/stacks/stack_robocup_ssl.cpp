@@ -103,7 +103,7 @@ string StackRoboCupSSL::getSettingsFileName() {
   return _cam_settings_filename;
 }
 StackRoboCupSSL::~StackRoboCupSSL() {
-	stack.clear();
+  stack.clear();
   delete lut_yuv;
   delete camera_parameters;
 }

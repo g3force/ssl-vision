@@ -365,7 +365,7 @@ set (libs ${QT_LIBRARIES}
 	${OpenCV_LIBS}
 	${FLYCAP_LIBS}
 	${SPINNAKER_LIBS}
-        lwpr
+	lwpr
 )
 target_link_libraries(sslvision ${libs})
 if(USE_QT5)
