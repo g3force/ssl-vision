@@ -137,7 +137,7 @@ VarList *PluginAutoColorCalibration::getSettings() {
 }
 
 string PluginAutoColorCalibration::getName() {
-  return "AutoColorCalibration";
+  return "Auto Color Calibration";
 }
 
 void PluginAutoColorCalibration::process_gui_commands() {
