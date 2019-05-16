@@ -1,61 +1,27 @@
-/*
- * plugin_online_color_calib.cpp
- *
- *  Created on: Jul 19, 2016
- *      Author: Nicolai Ommer <nicolai.ommer@gmail.com>
- *      Mark Geiger <markgeiger@posteo.de>
- */
+//========================================================================
+//  This software is free: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License Version 3,
+//  as published by the Free Software Foundation.
+//
+//  This software is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  Version 3 in the file COPYING that came with this distribution.
+//  If not, see <http://www.gnu.org/licenses/>.
+//========================================================================
+/*!
+  \file    online_color_calibrator.cpp
+  \brief   C++ Implementation: OnlineColorCalibrator
+  \author  Nicolai Ommer <nicolai.ommer@gmail.com>, (C) 2016
+*/
+//========================================================================
 
-#include "plugin_online_color_calib.h"
-#include <opencv2/opencv.hpp>
-#include <gui/automatedcolorcalibwidget.h>
+#include "online_color_calibrator.h"
 
-#define CH_ORANGE 2
-#define CH_YELLOW 3
-#define CH_BLUE 4
-#define CH_PINK 5
-#define CH_GREEN 7
-
-PluginOnlineColorCalib::PluginOnlineColorCalib(
-        FrameBuffer *_buffer,
-        LUT3D *lut,
-        const CameraParameters &camera_params,
-        const RoboCupField &field)
-        :
-        VisionPlugin(_buffer),
-        global_lut(lut),
-        camera_parameters(camera_params) {
-
-  auto *thread = new QThread();
-  thread->setObjectName("OnlineColorCalib");
-  worker = new Worker(lut, camera_params, field);
-  worker->moveToThread(thread);
-
-  _settings = new VarList("Online Color Calib");
-  _settings->addChild(_v_debug = new VarBool("debug", false));
-  _settings->addChild(worker->_v_removeOutlierBlobs);
-
-  connect(thread, SIGNAL(started()), worker, SLOT(process()));
-  connect(worker, SIGNAL(finished()), thread, SLOT(quit()));
-  connect(worker, SIGNAL(finished()), worker, SLOT(deleteLater()));
-  connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
-  thread->start();
-
-  this->installEventFilter(this);
-}
-
-PluginOnlineColorCalib::~PluginOnlineColorCalib() {
-  worker->running = false;
-}
-
-QWidget *PluginOnlineColorCalib::getControlWidget() {
-  if (_accw == nullptr)
-    _accw = new AutomatedColorCalibWidget();
-
-  return (QWidget *) _accw;
-}
-
-Worker::Worker(
+OnlineColorCalibrator::OnlineColorCalibrator(
         LUT3D *lut,
         const CameraParameters &camera_params,
         const RoboCupField &field)
@@ -114,11 +80,23 @@ Worker::Worker(
   inputIdx = 0;
   inputData[0].number = -1;
   inputData[1].number = -1;
+
+
+  auto *thread = new QThread();
+  thread->setObjectName("OnlineColorCalibrator");
+  moveToThread(thread);
+  connect(thread, SIGNAL(started()), this, SLOT(process()));
+  connect(this, SIGNAL(finished()), thread, SLOT(quit()));
+  connect(this, SIGNAL(finished()), this, SLOT(deleteLater()));
+  connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
+  thread->start();
 }
 
-Worker::~Worker() = default;
+OnlineColorCalibrator::~OnlineColorCalibrator() {
+  running = false;
+}
 
-void Worker::ResetModel() {
+void OnlineColorCalibrator::ResetModel() {
   mutex_model.lock();
   local_lut.reset();
   local_lut.updateDerivedLUTs();
@@ -141,7 +119,7 @@ void Worker::ResetModel() {
   mutex_model.unlock();
 }
 
-void Worker::CopyToLUT(LUT3D *lut) {
+void OnlineColorCalibrator::CopyToLUT(LUT3D *lut) {
   doubleVec in(3);
   doubleVec output(cProp.size());
 
@@ -185,7 +163,7 @@ void Worker::CopyToLUT(LUT3D *lut) {
   lut->updateDerivedLUTs();
 }
 
-int Worker::getColorFromModelOutput(
+int OnlineColorCalibrator::getColorFromModelOutput(
         doubleVec &output) {
   size_t maxIdx = 0;
   double maxValue = 0;
@@ -204,7 +182,7 @@ int Worker::getColorFromModelOutput(
   return 0;
 }
 
-void Worker::getRegionDesiredPixelDim(
+void OnlineColorCalibrator::getRegionDesiredPixelDim(
         const CMVision::Region *region,
         const int clazz,
         int &width,
@@ -260,7 +238,7 @@ static double getAngle(vector2d vec) {
   return -tmp;
 }
 
-bool Worker::isInAngleRange(
+bool OnlineColorCalibrator::isInAngleRange(
         const vector3d &pField,
         const int clazz,
         const BotPosStamped *botPos) {
@@ -292,7 +270,7 @@ static double distanceSq(
   return dx * dx + dy * dy;
 }
 
-BotPosStamped *Worker::findNearestBotPos(
+BotPosStamped *OnlineColorCalibrator::findNearestBotPos(
         const vector3d &loc,
         double *dist,
         const BotPosStamped *exceptThisBot = nullptr) {
@@ -309,7 +287,7 @@ BotPosStamped *Worker::findNearestBotPos(
   return nearestBot;
 }
 
-void Worker::updateModel(
+void OnlineColorCalibrator::updateModel(
         const RawImage *image,
         const pixelloc &loc,
         const uint8_t clazz) {
@@ -337,7 +315,7 @@ void Worker::updateModel(
   mutex_model.unlock();
 }
 
-void Worker::updateBotPositions(const SSL_DetectionFrame *detection_frame) {
+void OnlineColorCalibrator::updateBotPositions(const SSL_DetectionFrame *detection_frame) {
   std::vector<SSL_DetectionRobot> robots;
   robots.insert(robots.end(), detection_frame->robots_blue().begin(),
                 detection_frame->robots_blue().end());
@@ -410,7 +388,7 @@ static void addRegionCross(const int targetClazz,
   }
 }
 
-void Worker::addRegionKMeans(
+void OnlineColorCalibrator::addRegionKMeans(
         const RawImage *img,
         const int targetClazz,
         const CMVision::Region *region,
@@ -459,7 +437,7 @@ void Worker::addRegionKMeans(
   }
 }
 
-void Worker::processRegions(
+void OnlineColorCalibrator::processRegions(
         const RawImage *img,
         const std::vector<CMVision::Region> &regions,
         std::vector<LocLabeled> &locations) {
@@ -492,7 +470,7 @@ void Worker::processRegions(
   }
 }
 
-void Worker::update(FrameData *frame) {
+void OnlineColorCalibrator::update(FrameData *frame) {
   SSL_DetectionFrame *detection_frame = (SSL_DetectionFrame *) frame->map.get("ssl_detection_frame");
   if (detection_frame == nullptr) {
     printf("no detection frame\n");
@@ -528,7 +506,7 @@ void Worker::update(FrameData *frame) {
   d_condition.notify_one();
 }
 
-void Worker::process() {
+void OnlineColorCalibrator::process() {
   long long int lastNumber = -1;
   while (running) {
     WorkerInput *workerInput;
@@ -579,192 +557,4 @@ void Worker::process() {
 
   }
   emit finished();
-}
-
-ProcessResult PluginOnlineColorCalib::process(FrameData *frame,
-                                              RenderOptions *options) {
-  (void) options;
-  if (frame == nullptr)
-    return ProcessingFailed;
-
-  // handle GUI commands here
-  process_gui_commands();
-
-  // run initial calibration
-  if (initial_calib_running) {
-    ProcessResult result = initialCalibrator.handleInitialCalibration(frame, options, camera_parameters,
-                                                                      global_lut);
-    if (result == ProcessingOk) {
-      nFrames++;
-      if (nFrames > 5) {
-        nFrames = 0;
-        initial_calib_running = false;
-      }
-    }
-  }
-
-  // run online calibration
-  ColorFormat source_format = frame->video.getColorFormat();
-  if (enabled) {
-
-    if (source_format != COLOR_YUV422_UYVY && source_format != COLOR_RGB8) {
-      std::cerr << "Unsupported source format: " << source_format << std::endl;
-      enabled = false;
-      _accw->set_status("Unsupported source format");
-      return ProcessingFailed;
-    }
-
-    worker->update(frame);
-
-    if (_v_debug->getBool()) {
-      Image<raw8> *img_debug;
-      if ((img_debug = (Image<raw8> *) frame->map.get("cmv_online_color_calib")) == nullptr) {
-        img_debug = (Image<raw8> *) frame->map.insert("cmv_online_color_calib", new Image<raw8>());
-      }
-      img_debug->allocate(frame->video.getWidth(), frame->video.getHeight());
-      img_debug->fillColor(0);
-
-      worker->mutex_locs.lock();
-      for (auto ll : worker->locs) {
-        if (ll.clazz >= 0)
-          img_debug->setPixel(ll.loc.x, ll.loc.y, static_cast<raw8>(worker->cProp[ll.clazz].color));
-        else
-          img_debug->setPixel(ll.loc.x, ll.loc.y, 1);
-      }
-      worker->mutex_locs.unlock();
-    }
-
-    Image<raw8> *img_thresholded;
-    if ((img_thresholded = (Image<raw8> *) frame->map.get("cmv_learned_threshold")) == nullptr) {
-      img_thresholded = (Image<raw8> *) frame->map.insert("cmv_learned_threshold", new Image<raw8>());
-    }
-    img_thresholded->allocate(frame->video.getWidth(), frame->video.getHeight());
-    if (frame->video.getColorFormat() == COLOR_RGB8) {
-      auto *rgblut = (RGBLUT *) worker->local_lut.getDerivedLUT(CSPACE_RGB);
-      if (rgblut == nullptr) {
-        std::cerr << "WARNING: No RGB LUT has been defined." << std::endl;
-      } else {
-        CMVisionThreshold::thresholdImageRGB(img_thresholded, &(frame->video), rgblut);
-      }
-    } else if (frame->video.getColorFormat() == COLOR_YUV422_UYVY) {
-      CMVisionThreshold::thresholdImageYUV422_UYVY(img_thresholded, &(frame->video), &worker->local_lut);
-    } else {
-      std::cerr << "Unsupported source format for learned threshold: " << source_format << std::endl;
-    }
-  }
-
-  return ProcessingOk;
-}
-
-VarList *PluginOnlineColorCalib::getSettings() {
-  return _settings;
-}
-
-string PluginOnlineColorCalib::getName() {
-  return "OnlineColorCalib";
-}
-
-void PluginOnlineColorCalib::process_gui_commands() {
-  if (_accw == nullptr) {
-    return;
-  }
-  if (_accw->is_click_initial()) {
-    nFrames = 0;
-    initial_calib_running = true;
-    _accw->set_status("Triggered initial calibration");
-  }
-  if (_accw->is_click_start_learning()) {
-    enabled = true;
-    _accw->set_status("Triggered start learning");
-  }
-  if (_accw->is_click_finish_learning()) {
-    enabled = false;
-    _accw->set_status("Triggered finish learning");
-  }
-  if (_accw->is_click_update_model()) {
-    worker->globalLutUpdate = true;
-    worker->CopyToLUT(global_lut);
-    _accw->set_status("Model updated");
-  }
-  if (_accw->is_click_reset()) {
-    worker->ResetModel();
-    _accw->set_status("Model reset");
-  }
-
-  if (_accw->is_automatic_mode_active()) {
-    _accw->set_status("Automatic mode active");
-    worker->liveUpdate = true;
-    enabled = true;
-  } else {
-    if (worker->liveUpdate) {
-      _accw->set_status("Automatic mode deactivated");
-      enabled = false;
-    }
-    worker->liveUpdate = false;
-  }
-}
-
-void PluginOnlineColorCalib::mousePressEvent(QMouseEvent *event, pixelloc loc) {
-
-  std::vector<VarDouble *> ax;
-  std::vector<VarDouble *> ay;
-
-  ax.push_back(camera_parameters.additional_calibration_information->init_yellow_x);
-  ay.push_back(camera_parameters.additional_calibration_information->init_yellow_y);
-  ax.push_back(camera_parameters.additional_calibration_information->init_blue_x);
-  ay.push_back(camera_parameters.additional_calibration_information->init_blue_y);
-  ax.push_back(camera_parameters.additional_calibration_information->init_green_x);
-  ay.push_back(camera_parameters.additional_calibration_information->init_green_y);
-  ax.push_back(camera_parameters.additional_calibration_information->init_pink_x);
-  ay.push_back(camera_parameters.additional_calibration_information->init_pink_y);
-  ax.push_back(camera_parameters.additional_calibration_information->init_orange_x);
-  ay.push_back(camera_parameters.additional_calibration_information->init_orange_y);
-
-  if ((event->buttons() & Qt::LeftButton) != 0) {
-    drag_x = nullptr;
-    drag_y = nullptr;
-
-    for (size_t i = 0; i < ax.size(); i++) {
-      if (setDragParamsIfHit(loc, ax[i], ay[i])) {
-        break;
-      }
-    }
-    if (drag_x != nullptr && drag_y != nullptr) {
-      event->accept();
-      doing_drag = true;
-    } else {
-      event->ignore();
-    }
-  } else
-    event->ignore();
-}
-
-bool PluginOnlineColorCalib::setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y) {
-  double drag_threshold = 20; //in px
-  const double x_diff = x->getDouble() - loc.x;
-  const double y_diff = y->getDouble() - loc.y;
-  if (sqrt(x_diff * x_diff + y_diff * y_diff) < drag_threshold) {
-    // found a point
-    drag_x = x;
-    drag_y = y;
-    return true;
-  }
-  return false;
-}
-
-void PluginOnlineColorCalib::mouseReleaseEvent(QMouseEvent *event, pixelloc loc) {
-  (void) loc;
-  doing_drag = false;
-  event->accept();
-}
-
-void PluginOnlineColorCalib::mouseMoveEvent(QMouseEvent *event, pixelloc loc) {
-  if (doing_drag && (event->buttons() & Qt::LeftButton) != 0) {
-    if (loc.x < 0) loc.x = 0;
-    if (loc.y < 0) loc.y = 0;
-    drag_x->setDouble(loc.x);
-    drag_y->setDouble(loc.y);
-    event->accept();
-  } else
-    event->ignore();
 }

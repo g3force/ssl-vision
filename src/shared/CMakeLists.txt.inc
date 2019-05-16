@@ -47,6 +47,7 @@ set (SHARED_SRCS
   ${shared_dir}/util/framelimiter.cpp
 	${shared_dir}/util/blob_detector.cpp
 	${shared_dir}/util/initial_color_calibrator.cpp
+	${shared_dir}/util/online_color_calibrator.cpp
 
 	${shared_dir}/vartypes/VarBase64.cpp
 	${shared_dir}/vartypes/VarNotifier.cpp

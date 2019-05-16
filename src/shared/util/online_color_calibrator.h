@@ -1,13 +1,26 @@
-/*
- * plugin_online_color_calib.h
- *
- *  Created on: Jul 19, 2016
- *      Author: Nicolai Ommer <nicolai.ommer@gmail.com>
- *      Mark Geiger <markgeiger@posteo.de>
- */
+//========================================================================
+//  This software is free: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License Version 3,
+//  as published by the Free Software Foundation.
+//
+//  This software is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  Version 3 in the file COPYING that came with this distribution.
+//  If not, see <http://www.gnu.org/licenses/>.
+//========================================================================
+/*!
+  \file    online_color_calibrator.h
+  \brief   C++ Implementation: OnlineColorCalibrator
+  \author  Nicolai Ommer <nicolai.ommer@gmail.com>, (C) 2016
+*/
+//========================================================================
 
-#ifndef SRC_APP_PLUGINS_PLUGIN_ONLINE_COLOR_CALIB_H_
-#define SRC_APP_PLUGINS_PLUGIN_ONLINE_COLOR_CALIB_H_
+#ifndef SSL_VISION_ONLINECOLORCALIBRATOR_H
+#define SSL_VISION_ONLINECOLORCALIBRATOR_H
 
 #include <visionplugin.h>
 #include "cmvision_region.h"
@@ -31,20 +44,8 @@
 #include <gui/automatedcolorcalibwidget.h>
 
 #include "blob_detector.h"
-#include "initial_color_calibrator.h"
+#include "color_calibrator.h"
 
-class LocLabeled {
-public:
-    pixelloc loc;
-    int8_t clazz;
-};
-
-class BotPosStamped {
-public:
-    double time;
-    vector3d pos;
-    double orientation;
-};
 
 class AngleRange {
 public:
@@ -63,6 +64,7 @@ public:
     AngleRange angleRanges[2];
 };
 
+
 class WorkerInput {
 public:
     long long int number;
@@ -71,19 +73,20 @@ public:
     std::vector<CMVision::Region> regions;
 };
 
-class Worker : public QObject {
+
+class OnlineColorCalibrator : public QObject {
 Q_OBJECT
 
 public:
-    Worker(LUT3D *lut, const CameraParameters &camera_params, const RoboCupField &field);
+    OnlineColorCalibrator(LUT3D *lut, const CameraParameters &camera_params, const RoboCupField &field);
 
-    ~Worker() override;
+    ~OnlineColorCalibrator() override;
 
-    virtual void update(FrameData *frame);
+    void update(FrameData *frame);
 
-    virtual void CopyToLUT(LUT3D *lut);
+    void CopyToLUT(LUT3D *lut);
 
-    virtual void ResetModel();
+    void ResetModel();
 
 
     std::vector<ClazzProperties> cProp;
@@ -175,54 +178,5 @@ private:
     BlobDetector blobDetector;
 };
 
-class PluginOnlineColorCalib : public VisionPlugin {
-Q_OBJECT
 
-public:
-    PluginOnlineColorCalib(FrameBuffer *_buffer,
-                           LUT3D *lut,
-                           const CameraParameters &camera_params,
-                           const RoboCupField &field);
-
-    ~PluginOnlineColorCalib() override;
-
-    ProcessResult process(FrameData *data, RenderOptions *options) override;
-
-    QWidget *getControlWidget() override;
-
-    VarList *getSettings() override;
-
-    string getName() override;
-
-    void mousePressEvent(QMouseEvent *event, pixelloc loc) override;
-
-    void mouseReleaseEvent(QMouseEvent *event, pixelloc loc) override;
-
-    void mouseMoveEvent(QMouseEvent *event, pixelloc loc) override;
-
-private:
-
-    InitialColorCalibrator initialCalibrator;
-
-    LUT3D *global_lut;
-    const CameraParameters &camera_parameters;
-    bool initial_calib_running = false;
-    int nFrames = 0;
-
-    AutomatedColorCalibWidget *_accw = nullptr;
-    VarList *_settings;
-    VarBool *_v_debug;
-    Worker *worker;
-
-    VarDouble *drag_x = nullptr;
-    VarDouble *drag_y = nullptr;
-
-    bool doing_drag = false;
-    bool enabled = false;
-
-    bool setDragParamsIfHit(pixelloc loc, VarDouble *x, VarDouble *y);
-
-    void process_gui_commands();
-};
-
-#endif /* SRC_APP_PLUGINS_PLUGIN_ONLINE_COLOR_CALIB_H_ */
+#endif //SSL_VISION_ONLINECOLORCALIBRATOR_H

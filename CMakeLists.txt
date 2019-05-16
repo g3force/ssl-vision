@@ -247,7 +247,7 @@ set (SRCS ${SRCS}
 	src/app/plugins/plugin_legacysslnetworkoutput.cpp
 	src/app/plugins/plugin_visualize.cpp
 	src/app/plugins/plugin_dvr.cpp
-	src/app/plugins/plugin_online_color_calib.cpp
+	src/app/plugins/plugin_auto_color_calibration.cpp
 	src/app/plugins/plugin_init_color_calib.cpp
 	src/app/plugins/visionplugin.cpp
 
@@ -270,7 +270,9 @@ qt4_wrap_cpp (MOC_SRCS
 	src/app/gui/mainwindow.h
 	src/app/gui/videowidget.h
 	src/app/gui/jog_dial.h
+
 	src/shared/util/lut3d.h
+	src/shared/util/online_color_calibrator.h
 
 	src/app/plugins/plugin_dvr.h
 	src/app/plugins/plugin_publishgeometry.h
@@ -278,8 +280,7 @@ qt4_wrap_cpp (MOC_SRCS
 	src/app/plugins/visionplugin.h
 	src/app/plugins/plugin_colorcalib.h
 	src/app/plugins/plugin_colorthreshold.h
-	src/app/plugins/plugin_online_color_calib.h
-
+	src/app/plugins/plugin_auto_color_calibration.h
 
 	src/app/stacks/multistack_robocup_ssl.h
 
