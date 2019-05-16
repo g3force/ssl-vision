@@ -890,4 +890,15 @@ void CameraParameters::AdditionalCalibrationInformation::addSettingsToList(
   list.addChild(cov_ls_x);
   list.addChild(cov_ls_y);
   list.addChild(pointSeparation);
+
+  list.addChild(init_yellow_x);
+  list.addChild(init_yellow_y);
+  list.addChild(init_blue_x);
+  list.addChild(init_blue_y);
+  list.addChild(init_pink_x);
+  list.addChild(init_pink_y);
+  list.addChild(init_orange_x);
+  list.addChild(init_orange_y);
+  list.addChild(init_green_x);
+  list.addChild(init_green_y);
 }
