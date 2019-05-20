@@ -21,6 +21,9 @@
 #ifndef SSL_VISION_COLOR_CALIBRATOR_H
 #define SSL_VISION_COLOR_CALIBRATOR_H
 
+#include "geometry.h"
+
+#define CH_DARK_GREEN 1
 #define CH_ORANGE 2
 #define CH_YELLOW 3
 #define CH_BLUE 4
@@ -30,7 +33,7 @@
 class LocLabeled {
 public:
     pixelloc loc;
-    int8_t clazz;
+    int clazz;
 };
 
 

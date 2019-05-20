@@ -29,7 +29,7 @@ OnlineColorCalibrator::OnlineColorCalibrator(
         cProp(5),
         color2Clazz(10, 0),
         camera_parameters(camera_params),
-        local_lut(lut->getSizeX(), lut->getSizeY(), lut->getSizeZ()),
+        local_lut(lut->X_BITS, lut->Y_BITS, lut->Z_BITS),
         global_lut(lut),
         field(field) {
 
@@ -41,7 +41,7 @@ OnlineColorCalibrator::OnlineColorCalibrator(
   cProp[0].height = 42;
   cProp[0].minDist = 200;
   cProp[0].maxDist = DBL_MAX;
-  cProp[0].radius = 22; // also accept small detected blobs of orange // 22
+  cProp[0].radius = 22; // also accept small detected blobs of orange
   cProp[0].nAngleRanges = 0;
 
   cProp[1].color = CH_YELLOW;
@@ -112,9 +112,11 @@ void OnlineColorCalibrator::ResetModel() {
     doubleVec norm(3, 255);
     model->normIn(norm);
     model->setInitD(100);
-    model->wGen(0.1);
-    model->initLambda(0.995);
-    model->finalLambda(0.999);
+    model->wGen(0.05);
+    model->updateD(true);
+    model->useMeta(true);
+    model->initLambda(0.9999);
+    model->finalLambda(0.99999);
     models.push_back(model);
   }
   mutex_model.unlock();
@@ -291,14 +293,13 @@ BotPosStamped *OnlineColorCalibrator::findNearestBotPos(
 
 void OnlineColorCalibrator::updateModel(
         const RawImage *image,
-        const pixelloc &loc,
-        const uint8_t clazz) {
-  if (loc.x < 0 || loc.x >= image->getWidth()
-      || loc.y < 0 || loc.y >= image->getHeight()) {
+        const LocLabeled &locLabeled) {
+  if (locLabeled.loc.x < 0 || locLabeled.loc.x >= image->getWidth()
+      || locLabeled.loc.y < 0 || locLabeled.loc.y >= image->getHeight()) {
     return;
   }
 
-  yuv color = image->getYuv(loc.x, loc.y);
+  yuv color = image->getYuv(locLabeled.loc.x, locLabeled.loc.y);
 
   doubleVec v_in(3);
   v_in[0] = color.y;
@@ -309,7 +310,7 @@ void OnlineColorCalibrator::updateModel(
 
   doubleVec v_out(1);
   for (size_t i = 0; i < models.size(); i++) {
-    v_out[0] = (clazz == i);
+    v_out[0] = (locLabeled.clazz == i);
     models[i]->update(v_in, v_out);
   }
   mutex_model.unlock();
@@ -369,10 +370,7 @@ static void addRegionCross(const int targetClazz,
     pixelloc loc{};
     loc.x = static_cast<int>(region->cen_x + i);
     loc.y = static_cast<int>(region->cen_y);
-    LocLabeled ll{};
-    ll.loc = loc;
-    ll.clazz = targetClazz;
-    locations.push_back(ll);
+    locations.push_back(LocLabeled{loc, targetClazz});
   }
   for (int i = -height / 2 - offset; i <= height / 2 + offset; i++) {
     if (abs(i) < exclHeight) {
@@ -381,10 +379,7 @@ static void addRegionCross(const int targetClazz,
     pixelloc loc{};
     loc.x = static_cast<int>(region->cen_x);
     loc.y = static_cast<int>(region->cen_y + i);
-    LocLabeled ll{};
-    ll.loc = loc;
-    ll.clazz = targetClazz;
-    locations.push_back(ll);
+    locations.push_back(LocLabeled{loc, targetClazz});
   }
 }
 
@@ -401,38 +396,10 @@ void OnlineColorCalibrator::addRegionKMeans(
   blob.center.y = static_cast<int>(region->cen_y);
   blob.height = height + offset;
   blob.width = width + offset;
-  bool ok = blobDetector.detectBlob(img, blob, nullptr);
+  bool ok = blobDetector.detectBlob(img, blob, targetClazz);
   if (ok) {
-    int minX = std::min(region->x1, region->x2);
-    int maxX = std::max(region->x1, region->x2);
-    int minY = std::min(region->y1, region->y2);
-    int maxY = std::max(region->y1, region->y2);
-
-    for (int x = minX; x < maxX; x++) {
-      for (int y = minY; y < maxY; y++) {
-        bool setPixel = false;
-        for (size_t i = 0; i < blob.detectedPixels.size(); i++) {
-          // update model with pixel detected inside a blob
-          pixelloc loc{};
-          loc.x = blob.center.x + blob.detectedPixels[i].x;
-          loc.y = blob.center.y + blob.detectedPixels[i].y;
-          if (loc.x == x && loc.y == y) {
-            LocLabeled ll{};
-            ll.loc = loc;
-            ll.clazz = targetClazz;
-            locations.push_back(ll);
-            setPixel = true;
-            break;
-          }
-        }
-        if (!setPixel) {
-          // set pixel inside of region but not in blob -1
-          LocLabeled ll{};
-          ll.loc = {x, y};
-          ll.clazz = -1;
-          locations.push_back(ll);
-        }
-      }
+    for(auto loc : blob.classifiedLocations) {
+      locations.push_back(loc);
     }
   }
 }
@@ -462,7 +429,7 @@ void OnlineColorCalibrator::processRegions(
           addRegionCross(-1, region, region->width(), region->height(), -1, -1, 0, locations);
         }
       } else {
-        addRegionKMeans(img, clazz, region, pWidth, pHeight, 2, locations);
+        addRegionKMeans(img, clazz, region, pWidth, pHeight, 5, locations);
       }
     } else if (_v_removeOutlierBlobs->getBool()) {
       addRegionCross(-1, region, region->width(), region->height(), -1, -1, 0, locations);
@@ -532,7 +499,7 @@ void OnlineColorCalibrator::process() {
     auto t2 = std::chrono::system_clock::now();
 
     for (auto &loc : locations) {
-      updateModel(&workerInput->image, loc.loc, loc.clazz);
+      updateModel(&workerInput->image, loc);
     }
 
     auto t3 = std::chrono::system_clock::now();
@@ -551,7 +518,7 @@ void OnlineColorCalibrator::process() {
               "new locs:   " << locations.size() << std::endl << std::endl;
 
     mutex_locs.lock();
-    this->locs = locations;
+    locs = locations;
     mutex_locs.unlock();
 
     if (liveUpdate) {

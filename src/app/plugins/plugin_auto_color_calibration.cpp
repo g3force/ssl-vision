@@ -99,10 +99,11 @@ ProcessResult PluginAutoColorCalibration::process(FrameData *frame, RenderOption
 
       onlineColorCalibrator->mutex_locs.lock();
       for (auto ll : onlineColorCalibrator->locs) {
-        if (ll.clazz >= 0)
+        if (ll.clazz >= 0) {
           img_debug->setPixel(ll.loc.x, ll.loc.y, static_cast<raw8>(onlineColorCalibrator->cProp[ll.clazz].color));
-        else
-          img_debug->setPixel(ll.loc.x, ll.loc.y, 1);
+        } else {
+          img_debug->setPixel(ll.loc.x, ll.loc.y, CH_DARK_GREEN);
+        }
       }
       onlineColorCalibrator->mutex_locs.unlock();
     }

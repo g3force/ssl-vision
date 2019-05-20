@@ -139,8 +139,7 @@ private:
 
     void updateModel(
             const RawImage *image,
-            const pixelloc &loc,
-            uint8_t clazz);
+            const LocLabeled &locLabeled);
 
     void updateBotPositions(
             const SSL_DetectionFrame *detection_frame);
@@ -175,7 +174,7 @@ private:
 
     std::vector<LWPR_Object *> models;
     float robot_tracking_time;
-    int max_regions = 1000;
+    int max_regions = 10000;
     std::vector<BotPosStamped *> botPoss;
 
     BlobDetector blobDetector;

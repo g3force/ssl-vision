@@ -1,186 +1,70 @@
-/*
- * BlobDetector.cpp
- *
- *  Created on: Aug 22, 2016
- *      Author: Nicolai Ommer <nicolai.ommer@gmail.com>
- *      Mark Geiger <markgeiger@posteo.de>
- */
+//========================================================================
+//  This software is free: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License Version 3,
+//  as published by the Free Software Foundation.
+//
+//  This software is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  Version 3 in the file COPYING that came with this distribution.
+//  If not, see <http://www.gnu.org/licenses/>.
+//========================================================================
+/*!
+  \file    blob_detector.cpp
+  \brief   C++ Implementation: BlobDetector
+  \author  Nicolai Ommer <nicolai.ommer@gmail.com>, (C) 2016
+*/
+//========================================================================
 
 #include "blob_detector.h"
-
+#include "color_calibrator.h"
 #include <opencv2/opencv.hpp>
 
-BlobDetector::BlobDetector() = default;
+bool BlobDetector::detectBlob(const RawImage *img, Blob &blob, int targetClazz) {
 
-BlobDetector::~BlobDetector() = default;
+  std::vector<pixelloc> locations;
+  blob.circularLocations(img->getWidth(), img->getHeight(), locations);
 
-void BlobDetector::findRegion(
-        const std::vector<std::vector<int>> &classes,
-        const int x,
-        const int y,
-        const int posClass,
-        std::vector<pixelloc> &result) {
-  int height = static_cast<int>(classes.size());
-  int width = static_cast<int>(classes[0].size());
-  if (abs(x) > width / 2 || abs(y) > height / 2)
-    return;
-
-  if (classes[y + height / 2][x + width / 2] != posClass) return;
-
-  for (auto &i : result)
-    if (i.x == x && i.y == y) return;
-
-  pixelloc loc = {x, y};
-  result.push_back(loc);
-
-  findRegion(classes, x + 1, y, posClass, result);
-  findRegion(classes, x - 1, y, posClass, result);
-  findRegion(classes, x, y + 1, posClass, result);
-  findRegion(classes, x, y - 1, posClass, result);
-}
-
-bool BlobDetector::detectBlob(
-        const RawImage *img,
-        Blob &blob,
-        Image<raw8> *img_debug) {
-
-  int height = blob.height;
-  int width = blob.width;
-  if (height % 2 == 1) height++;
-  if (width % 2 == 1) width++;
-  int maxY = height / 2;
-  int maxX = width / 2;
-  cv::Mat data(0, 3, CV_32F);
-
-  for (int y = -maxY; y <= maxY; y += 1) {
-    for (int x = -maxX; x <= maxX; x += 1) {
-      int rx = blob.center.x + x;
-      int ry = blob.center.y + y;
-      yuv color;
-      if (rx >= 0 && ry >= 0 && rx < img->getWidth() && ry < img->getHeight() &&
-          x * x * maxY * maxY
-          + y * y * maxX * maxX
-          <= maxY * maxY * maxX * maxX) {
-        uyvy color2 = *((uyvy *) (img->getData()
-                                  + (sizeof(uyvy)
-                                     * (((ry * (img->getWidth())) + rx) / 2))));
-        color.u = color2.u;
-        color.v = color2.v;
-        if ((x % 2) == 0) {
-          color.y = color2.y1;
-        } else {
-          color.y = color2.y2;
-        }
-        cv::Mat row(1, 3, CV_32F);
-        row.at<float>(0) = color.y;
-        row.at<float>(1) = color.u;
-        row.at<float>(2) = color.v;
-        data.push_back(row);
-      }
-    }
-  }
-
-
-  int K = 3;
-  if (data.rows < K) {
+  cv::Mat allPixelsOfBlob(0, 3, CV_32F);
+  colorAtLocations(img, locations, allPixelsOfBlob);
+  if (allPixelsOfBlob.rows < numClusters) {
     return false;
   }
-  cv::Mat out;
-  bool repeat = true;
-  while (repeat) {
-    cv::TermCriteria tc;
-    int attempts = 10;
-    int flags = cv::KMEANS_PP_CENTERS;
-    cv::Mat centers;
-    cv::setNumThreads(0);
-    cv::kmeans(data, K, out, tc, attempts, flags, centers);
 
-    repeat = false;
-    if (K > 2) {
-      for (int i = 0; i < centers.rows && !repeat; i++) {
-        yuv col1 = {(unsigned char) centers.at<float>(i, 0),
-                    (unsigned char) centers.at<float>(i, 1),
-                    (unsigned char) centers.at<float>(i, 2)};
-        for (int j = i + 1; j < centers.rows; j++) {
-          yuv col2 = {(unsigned char) centers.at<float>(j, 0),
-                      (unsigned char) centers.at<float>(j, 1),
-                      (unsigned char) centers.at<float>(j, 2)};
-          int du = col1.u - col2.u;
-          int dv = col1.v - col2.v;
-          int dist = abs(du) + abs(dv);
-          if (dist < 30) {
-            K--;
-            repeat = true;
-            break;
-          }
-        }
-      }
+  cv::Mat clusteredClasses;
+  int K = clusterColors(allPixelsOfBlob, clusteredClasses);
+
+  int locationsPerClusterCenter[K];
+  memset(locationsPerClusterCenter, 0, sizeof(int) * K);
+  for (int i = 0; i < locations.size(); i++) {
+    auto loc = locations[i];
+    if (abs(loc.x - blob.center.x) < 2 && abs(loc.y - blob.center.y) < 2) {
+      locationsPerClusterCenter[clusteredClasses.at<int>(i)]++;
     }
   }
 
-  std::vector<std::vector<int>> classes(static_cast<unsigned long>(height + 1));
-  int i=0;
-  for (int y = -maxY; y <= maxY; y += 1) {
-    classes[y + maxY].resize(width + 1);
-    for (int x = -maxX; x <= maxX; x += 1) {
-      int rx = blob.center.x + x;
-      int ry = blob.center.y + y;
-      yuv color;
-      if (rx >= 0 && ry >= 0 && rx < img->getWidth() && ry < img->getHeight() &&
-          x * x * maxY * maxY
-          + y * y * maxX * maxX
-          <= maxY * maxY * maxX * maxX) {
-        classes[y + maxY][x + maxX] = out.at<int>(i++);
-      } else {
-        classes[y + maxY][x + maxX] = -1;
-      }
-    }
-  }
+  int blobKMeansClass = findBlobClass(K, locationsPerClusterCenter);
 
-  int sum_mean[K];
-  for (int a = 0; a < K; a++) sum_mean[a] = 0;
-  int s = 1;
-  for (int x = -s; x <= s; x++) {
-    for (int y = -s; y <= s; y++) {
-      sum_mean[classes[maxY + y][maxX + x]]++;
-    }
-  }
-
-  int posClass = 0;
-  int max_sum = 0;
-  for (int k = 0; k < K; k++) {
-    if (sum_mean[k] > max_sum) {
-      posClass = k;
-      max_sum = sum_mean[k];
-    }
-  }
-
-  int numPosClass = 0;
-  for (int y = -maxY; y <= maxY; y += 1) {
-    for (int x = -maxX; x <= maxX; x += 1) {
-      if (x * x * maxY * maxY
-          + y * y * maxX * maxX
-          <= maxY * maxY * maxX * maxX) {
-        if (classes[y + maxY][x + maxX] == posClass) {
-          numPosClass++;
-          if (img_debug != nullptr) img_debug->setPixel(blob.center.x + x, blob.center.y + y, 2);
-        } else {
-          if (img_debug != nullptr) img_debug->setPixel(blob.center.x + x, blob.center.y + y, 1);
-        }
-      }
+  blob.detectedPixels.clear();
+  for (int i = 0; i < locations.size(); i++) {
+    auto &loc = locations[i];
+    if (clusteredClasses.at<int>(i) == blobKMeansClass) {
+      blob.detectedPixels.push_back(loc);
+      blob.classifiedLocations.push_back(LocLabeled{loc, targetClazz});
+    } else {
+      blob.classifiedLocations.push_back(LocLabeled{loc, -1});
     }
   }
 
   int sumx = 0;
   int sumy = 0;
-  blob.detectedPixels.clear();
-  findRegion(classes, 0, 0, posClass, blob.detectedPixels);
-
   int lx = static_cast<int>(1e7), ly = static_cast<int>(1e7), hx = 0, hy = 0;
   for (int j = 0; j < blob.detectedPixels.size(); j++) {
     int x = blob.center.x + blob.detectedPixels[j].x;
     int y = blob.center.y + blob.detectedPixels[j].y;
-    if (img_debug != nullptr) img_debug->setPixel(x, y, 4);
     sumx += x;
     sumy += y;
     lx = min(lx, x);
@@ -189,58 +73,85 @@ bool BlobDetector::detectBlob(
     hy = max(hy, y);
   }
 
-  double circleArea = M_PI * width / 2.0 * height / 2.0;
-  if (blob.detectedPixels.empty() || blob.detectedPixels.size() > circleArea * 0.9) {
-    return false;
-  }
-  double relRegion = (double) blob.detectedPixels.size() / numPosClass;
-  if (relRegion < 0.7) {
-    return false;
-  }
-
+  const int height = blob.getHeightEven();
+  const int width = blob.getWidthEven();
   int regionWidth = hx - lx;
   int regionHeight = hy - ly;
   if (regionWidth >= width - 2 || regionHeight >= height - 2) {
+    // blob covers full patch
     return false;
   }
 
   double ratio = (double) min(regionWidth, regionHeight) / max(regionWidth, regionHeight);
   if (ratio < 0.5) {
+    // ration between width and height too unequal
     return false;
   }
 
+  // update blob center
   auto mu_x = static_cast<int>(round((double) sumx / blob.detectedPixels.size()));
   auto mu_y = static_cast<int>(round((double) sumy / blob.detectedPixels.size()));
   blob.center.x = mu_x;
   blob.center.y = mu_y;
-  if (img_debug != nullptr) {
-    img_debug->setPixel(blob.center.x, blob.center.y, 3);
-  }
 
   return true;
 }
 
-void BlobDetector::update(
-        const RawImage *img,
-        Image<raw8> *img_debug) {
+void BlobDetector::colorAtLocations(const RawImage *img, const std::vector<pixelloc> &locations, cv::Mat &data) const {
+  for (auto loc : locations) {
+    yuv color = img->getYuv(loc.x, loc.y);
+    cv::Mat row(1, 3, CV_32F);
+    row.at<float>(0) = color.y;
+    row.at<float>(1) = color.u;
+    row.at<float>(2) = color.v;
+    data.push_back(row);
+  }
+}
 
-  mutex.lock();
-  for (auto it = blobs.begin(); it != blobs.end();) {
-    bool ok = detectBlob(img, *it, img_debug);
-    if (!ok) {
-      it = blobs.erase(it);
-    } else {
-      bool del = false;
-      for (auto it2 = blobs.begin(); it2 != it; it2++) {
-        if (it->center.x == it2->center.x &&
-            it->center.y == it2->center.y) {
-          it = blobs.erase(it);
-          del = true;
-          break;
-        }
-      }
-      if (!del) it++;
+int BlobDetector::clusterColors(const cv::Mat &allPixelsOfBlob, cv::Mat &out) {
+  int K = numClusters;
+  for (;; K--) {
+    cv::TermCriteria tc;
+    int attempts = 10;
+    int flags = cv::KMEANS_PP_CENTERS;
+    cv::Mat centers;
+    cv::setNumThreads(0);
+    cv::kmeans(allPixelsOfBlob, K, out, tc, attempts, flags, centers);
+
+    if (K <= 2 || !similarClusterCentersPresent(centers)) {
+      return K;
     }
   }
-  mutex.unlock();
+}
+
+bool BlobDetector::similarClusterCentersPresent(cv::Mat &centers) const {
+  for (int i = 0; i < centers.rows; i++) {
+    yuv col1 = {(unsigned char) centers.at<float>(i, 0),
+                (unsigned char) centers.at<float>(i, 1),
+                (unsigned char) centers.at<float>(i, 2)};
+    for (int j = i + 1; j < centers.rows; j++) {
+      yuv col2 = {(unsigned char) centers.at<float>(j, 0),
+                  (unsigned char) centers.at<float>(j, 1),
+                  (unsigned char) centers.at<float>(j, 2)};
+      int du = col1.u - col2.u;
+      int dv = col1.v - col2.v;
+      int dist = abs(du) + abs(dv);
+      if (dist < 30) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+int BlobDetector::findBlobClass(int K, const int *locationsPerClusterCenter) const {
+  int blobClazz = 0;
+  int max_sum = 0;
+  for (int k = 0; k < K; k++) {
+    if (locationsPerClusterCenter[k] > max_sum) {
+      blobClazz = k;
+      max_sum = locationsPerClusterCenter[k];
+    }
+  }
+  return blobClazz;
 }
