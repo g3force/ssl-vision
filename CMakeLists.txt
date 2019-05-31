@@ -247,6 +247,7 @@ set (SRCS ${SRCS}
 	src/app/plugins/plugin_visualize.cpp
 	src/app/plugins/plugin_dvr.cpp
 	src/app/plugins/plugin_online_color_calib.cpp
+	src/app/plugins/plugin_init_color_calib.cpp
 	src/app/plugins/visionplugin.cpp
 
 	src/app/stacks/multistack_robocup_ssl.cpp
@@ -276,6 +277,7 @@ qt4_wrap_cpp (MOC_SRCS
 	src/app/plugins/plugin_colorcalib.h
 	src/app/plugins/plugin_colorthreshold.h
 	src/app/plugins/plugin_online_color_calib.h
+	src/app/plugins/plugin_init_color_calib.h
 
 	src/app/stacks/multistack_robocup_ssl.h
 
@@ -345,7 +347,7 @@ message (STATUS "Custom CC Flags: ${cc_flags}")
 
 add_definitions(${cc_flags})
 
-set (libs ${QT_LIBRARIES} ${EIGEN3_LIBRARIES} dc1394 jpeg png protobuf pthread GL GLU lwpr)
+set (libs ${QT_LIBRARIES} ${EIGEN3_LIBRARIES} ${OpenCV_LIBS} dc1394 jpeg png protobuf pthread GL GLU lwpr)
 
 ## build the common code
 add_library(sslvision ${SHARED_MOC_SRCS} ${SHARED_RC_SRCS} ${CC_PROTO} ${SHARED_SRCS})

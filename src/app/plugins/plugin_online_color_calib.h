@@ -27,20 +27,17 @@
 #include <mutex>
 #include <condition_variable>
 
-class RobotRegions {
-public:
-	double time;
-	vector3d pos;
-	double orientation;
-	std::vector<CMVision::Region> regions;
-};
-
 class LocStamped {
 public:
 	double time;
 	pixelloc loc;
 	int clazz;
-	double prop;
+};
+
+class Loc {
+public:
+	uint16_t x,y;
+	int8_t clazz;
 };
 
 class BotPosStamped {
@@ -70,8 +67,8 @@ public:
 class WorkerInput {
 public:
 	long long int number;
+	double time;
 	RawImage image;
-	SSL_DetectionFrame detection_frame;
 	std::vector<CMVision::Region> regions;
 };
 
@@ -82,20 +79,25 @@ public:
 	virtual ~Worker();
 	virtual void update(FrameData * frame);
 	virtual void CopytoLUT(LUT3D *lut);
-	virtual void GetLocs(std::vector<LocStamped>& locs);
-	virtual void resetModel();
+	virtual void ResetModel();
+	virtual void updateBotPositions(const SSL_DetectionFrame * detection_frame);
 
 	YUVLUT local_lut;
 	LUT3D * global_lut;
+	const CameraParameters& camera_parameters;
 
 	VarBool * _v_lifeUpdate;
 	VarBool * _v_removeOutlierBlobs;
 
-	std::vector<LocStamped*> locs;
 	std::vector<ClazzProperties> cProp;
 	std::vector<int> color2Clazz;
+	std::mutex mutex_botPoss;
+	std::mutex mutex_locs;
+	std::vector<BotPosStamped*> botPoss;
+	std::vector<Loc> locs_out;
 
 	bool globalLutUpdate;
+	bool running;
 public slots:
 	void process();
 signals:
@@ -103,56 +105,48 @@ signals:
 	void error(QString err);
 
 private:
+	virtual int getColorFromModelOutput(doubleVec& output);
 	virtual void updateModel(RawImage& image, pixelloc& loc, int clazz);
 
-	virtual void processRegions(const SSL_DetectionFrame * detection_frame, std::vector<CMVision::Region>& regions);
-//	virtual void updateRobotRegions(const SSL_DetectionFrame * detection_frame,
-//			std::vector<RobotRegions*>& robotRegionsList);
-	virtual void updateBotPositions(const SSL_DetectionFrame * detection_frame,
-			std::vector<BotPosStamped*>& botPoss);
-	virtual void updateLocs(const SSL_DetectionFrame * detection_frame,
-			std::vector<LocStamped*>& locs);
+	virtual void processRegions(double time, std::vector<CMVision::Region>& regions);
 
-	virtual int getColorFromModelOutput(doubleVec& output);
+	virtual BotPosStamped* findNearestBotPos(const vector3d& loc,	double* dist, BotPosStamped* exceptThisBot = 0);
 
-	virtual void regionFieldDim(CMVision::Region* region, int clazz,
-			double& width, double& height);
-	virtual void regionDesiredPixelDim(CMVision::Region* region, int clazz,
-			int& width, int& height);
-	virtual bool isInAngleRange(vector3d& pField, int clazz,
-			BotPosStamped* botPos);
+	virtual void getRegionFieldDim(CMVision::Region* region, int clazz, double& width, double& height);
+	virtual void getRegionDesiredPixelDim(CMVision::Region* region, int clazz,	int& width, int& height);
+	virtual bool isInAngleRange(vector3d& pField, int clazz, BotPosStamped* botPos);
 
-	virtual void addRegion(const SSL_DetectionFrame * detection_frame,
-			std::vector<LocStamped*>& locs, int clazz, float x, float y,
-			double prop = 1);
-	virtual void addRegionCross(const SSL_DetectionFrame * detection_frame,
-			std::vector<LocStamped*>& locs, int clazz, int targetClazz,
+	virtual void updateLocs(double time);
+	virtual LocStamped* findNearestLoc(const LocStamped& loc, double* dist, LocStamped* exceptThis = 0);
+	virtual void addLoc(double time, int clazz, float x, float y);
+	virtual void addRegionCross(double time, int clazz, int targetClazz,
 			CMVision::Region* region, int width, int height, int exclWidth,
 			int exclHeight, int offset);
-	virtual void addRegionEllipse(const SSL_DetectionFrame * detection_frame,
-			std::vector<LocStamped*>& locs, int clazz, int targetClazz,
+	virtual void addRegionEllipse(double time, int clazz, int targetClazz,
 			CMVision::Region* region, int width, int height, int exclWidth,
 			int exclHeight, int offset);
 
 	// synchronization
-	std::mutex d_mutex;
+	std::mutex mutex_sync;
 	std::mutex mutex_input;
-	std::mutex mutex_locs;
 	std::mutex mutex_model;
 	std::condition_variable d_condition;
 
 	// input data
-	WorkerInput input;
+	WorkerInput* input;
+	WorkerInput inputData[2];
+	int inputIdx;
 
 	// state
-	const CameraParameters& camera_parameters;
 	const RoboCupField& field;
 
-	LWPR_Object* model;
+	std::vector<LWPR_Object*> models;
 	float robot_tracking_time;
+	float loc_tracking_time;
+	int max_regions;
+	int max_locs;
 
-	std::vector<BotPosStamped*> botPoss;
-	std::vector<RobotRegions*> robotRegionsList;
+	std::vector<LocStamped*> locs;
 };
 
 class PluginOnlineColorCalib: public VisionPlugin {
